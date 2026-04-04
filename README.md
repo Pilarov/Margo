@@ -27,7 +27,7 @@ RetainDB is a self-hostable memory layer for AI agents. Give your agents persist
 
 ## Quickstart
 
-**Requirements:** Docker (or Node 18+ with Postgres + pgvector)
+### Option 1 — Docker (easiest)
 
 ```bash
 git clone https://github.com/retaindb/retaindb
@@ -38,29 +38,58 @@ docker compose up
 
 No config needed. No API keys required for local use.
 
-To enable embeddings, add your OpenAI key (optional — falls back to a local model otherwise):
+To enable OpenAI embeddings (optional — falls back to a local model otherwise):
 
 ```bash
 OPENAI_API_KEY=sk-... docker compose up
 ```
+
+---
+
+### Option 2 — Without Docker (Node 18+ + Postgres)
+
+If you don't have Docker, you can run the server directly with Node.js. You'll need Postgres with the `pgvector` extension installed.
+
+**1. Install Postgres + pgvector**
+
+- macOS: `brew install postgresql pgvector` then `brew services start postgresql`
+- Ubuntu/Debian: `sudo apt install postgresql` then install pgvector from [github.com/pgvector/pgvector](https://github.com/pgvector/pgvector)
+- Windows: use [Postgres.app](https://postgresapp.com) + pgvector from the pgvector releases page
+
+**2. Create the database**
+
+```bash
+psql -U postgres -c "CREATE USER retaindb WITH PASSWORD 'retaindb';"
+psql -U postgres -c "CREATE DATABASE retaindb OWNER retaindb;"
+psql -U postgres -d retaindb -c "CREATE EXTENSION IF NOT EXISTS vector;"
+```
+
+**3. Clone and configure**
+
+```bash
+git clone https://github.com/retaindb/retaindb
+cd retaindb
+cp .env.example packages/server/.env
+# Edit packages/server/.env and set DATABASE_URL if needed
+```
+
+**4. Install dependencies and run**
+
+```bash
+npm install -g pnpm
+pnpm install
+pnpm --filter @retaindb/server run db:push   # apply schema
+pnpm dev:server                               # start the server
+# Server ready at http://localhost:3000
+```
+
+---
 
 ### OSS notes
 
 - The OSS server is single-tenant by default. Requests are scoped to a local default org on the server side, so clients do not need to send `X-Organization-Id`.
 - If you do set `RETAINDB_API_KEY`, auth becomes a single shared server key for your deployment. This is for self-hosted protection, not multi-tenant cloud isolation.
 - The `playwright` connector degrades to the standard web crawler in OSS instead of relying on the cloud browser-agent stack.
-
-### Core server only
-
-If you only want the self-hosted API right now, use the server-only scripts instead of the full workspace build:
-
-```bash
-pnpm install
-pnpm build:server
-pnpm dev:server
-```
-
-This avoids unrelated SDK and MCP workspace failures while the OSS split is still being cleaned up.
 
 ---
 
