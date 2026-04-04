@@ -1,10 +1,12 @@
-FROM node:20-slim AS base
+FROM node:20 AS base
 RUN npm install -g pnpm@9.15.0
 WORKDIR /app
 
 # Install dependencies
 FROM base AS deps
-COPY package.json pnpm-workspace.yaml ./
+# Build tools needed for native modules (@xenova/transformers / onnxruntime)
+RUN apt-get update && apt-get install -y build-essential python3 && rm -rf /var/lib/apt/lists/*
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY packages/server/package.json ./packages/server/package.json
 RUN pnpm install --frozen-lockfile --filter @retaindb/server...
 
@@ -29,5 +31,4 @@ ENV PORT=3000
 
 EXPOSE 3000
 
-# Run migrations then start
 CMD ["sh", "-c", "npx prisma migrate deploy --schema=./prisma/schema.prisma && node dist/index.js"]
