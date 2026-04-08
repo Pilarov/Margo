@@ -9,9 +9,22 @@
 import OpenAI from "openai";
 import type { TemporalFilter } from "./types.js";
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY || "",
-});
+function getOpenAI() {
+  return new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY || "",
+    ...(process.env.OPENAI_BASE_URL ? { baseURL: process.env.OPENAI_BASE_URL } : {}),
+  });
+}
+
+function getTemporalModel(): string {
+  return process.env.TEMPORAL_MODEL || process.env.OPENAI_MODEL || "gpt-5.4-mini";
+}
+
+function getMaxOutputTokensParam(model: string, maxTokens: number) {
+  return /^gpt-5/i.test(model)
+    ? { max_completion_tokens: maxTokens }
+    : { max_tokens: maxTokens };
+}
 
 // Fast path: Keywords that definitely indicate temporal constraints
 const TEMPORAL_KEYWORDS = [
@@ -153,9 +166,10 @@ Extract temporal information and return JSON:
 Return ONLY the JSON, no other text.`;
 
   try {
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini", // Faster model for parsing
-      max_tokens: 512,
+    const model = getTemporalModel();
+    const response = await getOpenAI().chat.completions.create({
+      model,
+      ...getMaxOutputTokensParam(model, 512),
       temperature: 0.0,
       messages: [{ role: "user", content: prompt }],
       response_format: { type: "json_object" },
@@ -290,9 +304,10 @@ Return JSON:
 }`;
 
   try {
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      max_tokens: 256,
+    const model = getTemporalModel();
+    const response = await getOpenAI().chat.completions.create({
+      model,
+      ...getMaxOutputTokensParam(model, 256),
       temperature: 0.0,
       messages: [{ role: "user", content: prompt }],
       response_format: { type: "json_object" },

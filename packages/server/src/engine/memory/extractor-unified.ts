@@ -97,7 +97,7 @@ export async function extractMemories(
 
     if (shouldEscalate) {
       const strongerMemories = await extractImplicitMemories(message, context, {
-        model: options.escalationModel || "gpt-4o",
+        model: options.escalationModel || "gpt-5.4-mini",
         minConfidence,
         sourceRole: options.sourceRole,
       });

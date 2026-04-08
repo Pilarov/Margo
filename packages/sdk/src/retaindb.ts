@@ -22,6 +22,7 @@ import { SearchResponseCache } from "./core/cache.js";
 import { WriteQueue } from "./core/queue.js";
 import { DiagnosticsStore } from "./core/telemetry.js";
 import { MemoryModule } from "./modules/memory.js";
+import { FilesModule } from "./modules/files.js";
 import type { LearnInput, LearnResult, MemorySearchResponse } from "./modules/types.js";
 
 export interface RetainDBOptions {
@@ -137,6 +138,7 @@ export interface SessionLearnScope {
 
 export class RetainDB {
   private readonly memory: MemoryModule;
+  readonly files: FilesModule;
   private readonly queue: WriteQueue;
   private readonly project: string | undefined;
   private readonly _client: RuntimeClient;
@@ -204,6 +206,7 @@ export class RetainDB {
     this.memory = new MemoryModule(client, cache, this.queue, {
       defaultProject: project,
     });
+    this.files = new FilesModule(client, project);
 
     // Auto-drain the write queue when the Node.js process exits normally
     if (typeof process !== "undefined" && typeof process.on === "function") {

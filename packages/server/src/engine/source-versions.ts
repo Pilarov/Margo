@@ -16,7 +16,6 @@ export async function ensureActiveSourceVersion(sourceId: string) {
       orgId: true,
       projectId: true,
       activeVersionId: true,
-      
     },
   });
   if (!source) throw new Error(`Source ${sourceId} not found`);
@@ -84,7 +83,6 @@ export async function createStagedSourceVersion(sourceId: string, params?: {
       id: true,
       orgId: true,
       projectId: true,
-      
     },
   });
   if (!source) throw new Error(`Source ${sourceId} not found`);

@@ -4,5 +4,7 @@
  */
 import { config } from "dotenv";
 
-config({ path: ".env" });
+// For local runs, let the root .env override stale shell exports.
+// Then load src/.env only as a fallback so it does not silently swap databases.
+config({ path: ".env", override: true });
 config({ path: "src/.env" });

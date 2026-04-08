@@ -10,7 +10,8 @@ import crypto from "crypto";
 import { prisma } from "../db/index.js";
 import type { AuthContext } from "../middleware/auth.js";
 import { rateLimitMiddleware, RateLimits } from "../middleware/rate-limit.js";
-
+import { dialecticQuery } from "../engine/memory/dialectic.js";
+import { synthesizeAgentModel, seedAgentIdentity } from "../engine/memory/agent-model.js";
 import { extractExplicitMemory } from "../engine/memory/patterns.js";
 import {
   searchMemories,
@@ -19,9 +20,12 @@ import {
   getSessionMemories,
   getUserProfile,
   getVersionChain,
+  synthesizeUserModel,
+  detectUserGaps,
 } from "../engine/memory/index.js";
 import { extractMemories, extractMemoriesForSession, shouldExtractMemory } from "../engine/memory/extractor-unified.js";
-import { ingestionQueue } from "../engine/ingestion-queue.js";
+import { ingestionQueue, type IngestionMemory } from "../engine/ingestion-queue.js";
+import { classifyRetryableWriteFailure } from "../engine/memory/write-reliability.js";
 import { addPendingOverlayEntry, getPendingOverlayEntries } from "../engine/pending-overlay.js";
 import type { ExtractedMemory } from "../engine/memory/types.js";
 import {
@@ -2604,6 +2608,170 @@ memoryRoutes.post(
     } catch (error) {
       console.error("Memory cleanup error:", error);
       return c.json({ error: "Cleanup failed" }, 500);
+    }
+  }
+);
+
+// ─── Dialectic query ─────────────────────────────────────────────────────────
+// Answer a natural-language question about a user from their stored memories
+
+memoryRoutes.post(
+  "/v1/memory/dialectic",
+  rateLimitMiddleware(RateLimits.query),
+  zValidator(
+    "json",
+    z.object({
+      user_id: z.string().min(1),
+      question: z.string().min(1).max(1000),
+      project: z.string().optional(),
+      reasoning_level: z.enum(["minimal", "low", "medium", "high"]).optional().default("medium"),
+    })
+  ),
+  async (c) => {
+    const auth = c.get("auth") as AuthContext;
+    const { user_id, question, project, reasoning_level } = c.req.valid("json");
+
+    if (!project) {
+      return c.json({ success: false, error: "project is required for dialectic queries" }, 400);
+    }
+
+    try {
+      const result = await dialecticQuery({
+        userId: user_id,
+        projectId: project,
+        query: question,
+        reasoningLevel: reasoning_level as DialecticReasoningLevel,
+      });
+      return c.json({ success: true, ...result });
+    } catch (err: any) {
+      return c.json({ success: false, error: err?.message || "Dialectic query failed" }, 500);
+    }
+  }
+);
+
+// ─── User model synthesis ─────────────────────────────────────────────────────
+// Build a structured profile of a user from their memories
+
+memoryRoutes.get(
+  "/v1/memory/user-model/:userId",
+  rateLimitMiddleware(RateLimits.query),
+  zValidator("query", z.object({ project: z.string().optional() })),
+  async (c) => {
+    const auth = c.get("auth");
+    const userId = c.req.param("userId");
+    const query = c.req.valid("query");
+    const traceId = getTraceId(c);
+    c.header("x-trace-id", traceId);
+
+    try {
+      const project = await ensureProject(auth.orgId, query.project, auth.isAdmin);
+      const model = await synthesizeUserModel({
+        userId,
+        projectId: project.id,
+      });
+      return c.json({
+        ...model,
+        trace_id: traceId,
+      });
+    } catch (error) {
+      console.error("Get user model error:", error);
+      return memoryError(c, 500, "INTERNAL_ERROR", "Failed to build user model", traceId);
+    }
+  }
+);
+
+memoryRoutes.post(
+  "/v1/memory/profile/:userId/gaps",
+  rateLimitMiddleware(RateLimits.query),
+  zValidator(
+    "json",
+    z.object({
+      project: z.string().optional(),
+      context: z.string().min(1),
+      limit: z.number().int().min(1).max(10).optional(),
+    })
+  ),
+  async (c) => {
+    const auth = c.get("auth");
+    const userId = c.req.param("userId");
+    const body = c.req.valid("json");
+    const traceId = getTraceId(c);
+    c.header("x-trace-id", traceId);
+
+    try {
+      const project = await ensureProject(auth.orgId, body.project, auth.isAdmin);
+      const gaps = await detectUserGaps({
+        userId,
+        projectId: project.id,
+        context: body.context,
+        limit: body.limit,
+      });
+      return c.json({
+        ...gaps,
+        trace_id: traceId,
+      });
+    } catch (error) {
+      console.error("Get user gaps error:", error);
+      return memoryError(c, 500, "INTERNAL_ERROR", "Failed to detect user gaps", traceId);
+    }
+  }
+);
+
+// ──────────────────────────────────────────────────────────────
+// Agent Self-Model — what the agent knows about itself
+// ──────────────────────────────────────────────────────────────
+
+memoryRoutes.get(
+  "/v1/memory/agent/:agentId/model",
+  rateLimitMiddleware(RateLimits.query),
+  zValidator("query", z.object({ project: z.string().optional() })),
+  async (c) => {
+    const auth = c.get("auth");
+    const agentId = c.req.param("agentId");
+    const query = c.req.valid("query");
+    const traceId = getTraceId(c);
+    c.header("x-trace-id", traceId);
+    try {
+      const project = await ensureProject(auth.orgId, query.project, auth.isAdmin);
+      const model = await synthesizeAgentModel({ agentId, projectId: project.id });
+      return c.json({ ...model, trace_id: traceId });
+    } catch (error) {
+      console.error("Agent model error:", error);
+      return memoryError(c, 500, "INTERNAL_ERROR", "Failed to build agent model", traceId);
+    }
+  }
+);
+
+memoryRoutes.post(
+  "/v1/memory/agent/:agentId/seed",
+  rateLimitMiddleware(RateLimits.mutation),
+  zValidator(
+    "json",
+    z.object({
+      project: z.string().optional(),
+      content: z.string().min(1).max(32000),
+      source: z.string().optional().default("manual"),
+    })
+  ),
+  async (c) => {
+    const auth = c.get("auth");
+    const agentId = c.req.param("agentId");
+    const body = c.req.valid("json");
+    const traceId = getTraceId(c);
+    c.header("x-trace-id", traceId);
+    try {
+      const project = await ensureProject(auth.orgId, body.project, auth.isAdmin);
+      const result = await seedAgentIdentity({
+        agentId,
+        projectId: project.id,
+        orgId: auth.orgId,
+        content: body.content,
+        source: body.source,
+      });
+      return c.json({ agent_id: agentId, ...result, trace_id: traceId });
+    } catch (error) {
+      console.error("Agent seed error:", error);
+      return memoryError(c, 500, "INTERNAL_ERROR", "Failed to seed agent identity", traceId);
     }
   }
 );

@@ -44,9 +44,50 @@ function isRedisAvailable(): boolean {
   return _redisClient !== null && _redisClient.isOpen && _redisClient.isReady;
 }
 
-export async function initializeRedis(_redisUrl?: string): Promise<void> {
-  // OSS: in-memory cache only — no Redis dependency
-  console.log("ℹ️  Using in-memory cache (Redis not required in OSS)");
+export async function initializeRedis(redisUrl?: string): Promise<void> {
+  if (!redisUrl && !process.env.REDIS_URL) {
+    console.log("⚠️  No Redis URL, using in-memory cache");
+    return;
+  }
+
+  try {
+    const { createClient } = await import("redis");
+    _redisClient = createClient({
+      url: redisUrl || process.env.REDIS_URL,
+      socket: {
+        reconnectStrategy: (retries: number) => {
+          if (retries > 10) {
+            console.error("Redis max reconnect attempts reached, using in-memory cache");
+            return new Error("Max reconnection attempts reached");
+          }
+          const delay = Math.min(retries * 100, 3000);
+          console.log(`Redis reconnecting in ${delay}ms (attempt ${retries})`);
+          return delay;
+        },
+      },
+    });
+
+    _redisClient.on("error", (err: Error) => {
+      console.error("Redis error:", err.message);
+    });
+
+    _redisClient.on("connect", () => {
+      console.log("✅ Redis connected");
+    });
+
+    _redisClient.on("ready", () => {
+      console.log("✅ Redis ready");
+    });
+
+    _redisClient.on("end", () => {
+      console.log("⚠️  Redis connection closed");
+    });
+
+    await _redisClient.connect();
+  } catch (error) {
+    console.error("❌ Redis connection failed, using in-memory cache:", error);
+    _redisClient = null;
+  }
 }
 
 /**

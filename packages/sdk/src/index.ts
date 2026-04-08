@@ -2133,6 +2133,8 @@ export {
   type MemoryRouterFallbackReason,
 } from "./router/memory-router.js";
 export { memoryGraphToMermaid } from "./graph-utils.js";
+export { FilesModule } from "./modules/files.js";
+export type { SharedFile, FileScope, StoreOptions, StoreResult } from "./modules/files.js";
 export default RetainDBContext;
 
 // Primary SDK — use RetainDB for new projects

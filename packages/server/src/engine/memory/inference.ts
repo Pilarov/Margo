@@ -1,23 +1,45 @@
 import OpenAI from "openai";
-import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import type { MemorySourceRole, MemoryType, ExtractedMemory } from "./types.js";
 
 // ── Lazy clients ──────────────────────────────────────────────────────────────
 
-let _openai: OpenAI | null = null;
-let _anthropic: Anthropic | null = null;
-
 function getOpenAI(): OpenAI | null {
-  if (!process.env.OPENAI_API_KEY) return null;
-  if (!_openai) _openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-  return _openai;
+  const apiKey = process.env.OPENAI_API_KEY || "";
+  if (!apiKey) return null;
+  return new OpenAI({
+    apiKey,
+    ...(process.env.OPENAI_BASE_URL ? { baseURL: process.env.OPENAI_BASE_URL } : {}),
+  });
 }
 
-function getAnthropic(): Anthropic | null {
-  if (!process.env.ANTHROPIC_API_KEY) return null;
-  if (!_anthropic) _anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-  return _anthropic;
+function shouldRetryWithoutStructuredOutput(err: any): boolean {
+  const message = String(err?.message || "");
+  return err?.status === 400 && /Failed to generate JSON|Failed to validate JSON|tool_use_failed|json_validate_failed/i.test(message);
+}
+
+function getInferenceModel(modelOverride?: string): string {
+  return modelOverride
+    || process.env.INFERENCE_MODEL
+    || process.env.EXTRACTOR_MODEL
+    || process.env.OPENAI_MODEL
+    || "gpt-5.4-mini";
+}
+
+function getMaxOutputTokensParam(model: string, maxTokens: number) {
+  return /^gpt-5/i.test(model)
+    ? { max_completion_tokens: maxTokens }
+    : { max_tokens: maxTokens };
+}
+
+function getProviderSpecificModelParams(model: string) {
+  if (/^qwen\/qwen3-/i.test(model)) {
+    return {
+      reasoning_format: "hidden",
+      reasoning_effort: "none",
+    };
+  }
+  return {};
 }
 
 // ── Zod schema ────────────────────────────────────────────────────────────────
@@ -26,6 +48,29 @@ const MEMORY_TYPES = [
   "factual", "preference", "event", "relationship", "opinion", "goal", "instruction",
   "decision", "constraint", "solution", "project_state", "correction", "workflow",
 ] as const;
+const MEMORY_TYPE_MAP: Record<string, typeof MEMORY_TYPES[number]> = {
+  fact: "factual",
+  facts: "factual",
+  factual: "factual",
+  information: "factual",
+  info: "factual",
+  preference: "preference",
+  preferences: "preference",
+  event: "event",
+  episode: "event",
+  episodic: "event",
+  relationship: "relationship",
+  opinion: "opinion",
+  goal: "goal",
+  instruction: "instruction",
+  decision: "decision",
+  constraint: "constraint",
+  solution: "solution",
+  project_state: "project_state",
+  "project state": "project_state",
+  correction: "correction",
+  workflow: "workflow",
+};
 
 const InferredMemorySchema = z.object({
   content: z.string().min(8).max(400),
@@ -87,38 +132,36 @@ async function runWithOpenAI(message: string, context: string, model: string): P
     context ? `## Context\n${context}` : null,
     `## Message\n${message}`,
   ].filter(Boolean).join("\n\n");
-
-  const response = await client.chat.completions.create({
+  const structuredParams = {
     model,
-    max_tokens: 512,
+    ...getMaxOutputTokensParam(model, 512),
     temperature: 0.1,
     messages: [
       { role: "system", content: SYSTEM_PROMPT },
       { role: "user", content: userContent },
     ],
-    response_format: { type: "json_object" },
-  });
-  return response.choices[0]?.message?.content?.trim() ?? null;
-}
-
-async function runWithAnthropic(message: string, context: string, model: string): Promise<string | null> {
-  const client = getAnthropic();
-  if (!client) return null;
-
-  const userContent = [
-    context ? `## Context\n${context}` : null,
-    `## Message\n${message}`,
-    "\nReturn a valid JSON object: { \"memories\": [...] }. No markdown, no explanation.",
-  ].filter(Boolean).join("\n\n");
-
-  const response = await client.messages.create({
+    ...getProviderSpecificModelParams(model),
+    response_format: { type: "json_object" as const },
+  };
+  const fallbackParams = {
     model,
-    max_tokens: 512,
-    system: SYSTEM_PROMPT,
-    messages: [{ role: "user", content: userContent }],
-  });
-  const block = response.content[0];
-  return block.type === "text" ? block.text.trim() : null;
+    ...getMaxOutputTokensParam(model, 512),
+    temperature: 0.1,
+    messages: [
+      { role: "system", content: `${SYSTEM_PROMPT}\n\nReturn ONLY valid JSON. Do not use markdown fences or extra commentary.` },
+      { role: "user", content: `${userContent}\n\nReturn ONLY a valid JSON object with a top-level "memories" array.` },
+    ],
+    ...getProviderSpecificModelParams(model),
+  };
+
+  let response;
+  try {
+    response = await client.chat.completions.create(structuredParams);
+  } catch (err: any) {
+    if (!shouldRetryWithoutStructuredOutput(err)) throw err;
+    response = await client.chat.completions.create(fallbackParams);
+  }
+  return response.choices[0]?.message?.content?.trim() ?? null;
 }
 
 // ── Response parsing ──────────────────────────────────────────────────────────
@@ -126,9 +169,10 @@ async function runWithAnthropic(message: string, context: string, model: string)
 function parseInferenceResponse(text: string): unknown[] {
   let parsed: unknown;
   try {
-    parsed = JSON.parse(text);
+    const jsonText = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "").trim();
+    parsed = JSON.parse(jsonText);
   } catch {
-    // Try to extract JSON object/array from surrounding text (Anthropic sometimes wraps)
+    // Try to extract a JSON object/array from surrounding text if the model wrapped it
     const jsonMatch = text.match(/\{[\s\S]*\}/) ?? text.match(/\[[\s\S]*\]/);
     if (!jsonMatch) return [];
     try { parsed = JSON.parse(jsonMatch[0]); } catch { return []; }
@@ -145,8 +189,46 @@ function parseInferenceResponse(text: string): unknown[] {
   }
 
   // Validate items individually — drop bad ones instead of failing the whole batch
+  const normalizeMemoryType = (raw: unknown): typeof MEMORY_TYPES[number] => {
+    const key = String(raw || "factual").toLowerCase().trim();
+    return MEMORY_TYPE_MAP[key] || "factual";
+  };
+  const normalizeConfidence = (raw: unknown): number => {
+    if (typeof raw === "number" && Number.isFinite(raw)) return raw;
+    if (typeof raw === "string") {
+      const parsedValue = Number.parseFloat(raw);
+      if (Number.isFinite(parsedValue)) return parsedValue;
+    }
+    return 0.8;
+  };
+  const normalizeEntities = (raw: unknown): string[] => {
+    if (Array.isArray(raw)) {
+      return raw
+        .filter((value): value is string => typeof value === "string")
+        .map((value) => value.trim())
+        .filter(Boolean);
+    }
+    if (typeof raw === "string" && raw.trim()) {
+      return [raw.trim()];
+    }
+    return [];
+  };
+
+  const normalizedItems = items.map((item: any) => ({
+    content: item?.content ?? item?.memory ?? item?.text ?? item?.description ?? item?.fact ?? item?.statement,
+    memoryType: normalizeMemoryType(item?.memoryType ?? item?.memory_type ?? item?.type ?? item?.category),
+    confidence: normalizeConfidence(item?.confidence ?? item?.score),
+    reasoning: item?.reasoning,
+    entities: normalizeEntities(
+      item?.entities
+        ?? item?.entityMentions
+        ?? item?.entity_mentions
+        ?? item?.people
+    ),
+  }));
+
   const valid: z.infer<typeof InferredMemorySchema>[] = [];
-  for (const item of items) {
+  for (const item of normalizedItems) {
     const r = InferredMemorySchema.safeParse(item);
     if (r.success) {
       valid.push(r.data);
@@ -180,22 +262,11 @@ export async function extractImplicitMemories(
       safeContext ? `## Context\n${safeContext}` : "",
     ].filter(Boolean).join("\n\n");
 
-    const preferAnthropic = process.env.RETAINDB_INFERENCE_PROVIDER === "anthropic";
     const openai = getOpenAI();
-    const anthropic = getAnthropic();
-
-    if (openai && !preferAnthropic) {
-      text = await runWithOpenAI(safeMessage, effectiveContext, options?.model ?? "gpt-4o-mini");
-    } else if (anthropic) {
-      const anthropicModel =
-        options?.model === "gpt-4o" ? "claude-sonnet-4-6"
-        : options?.model === "gpt-4o-mini" ? "claude-haiku-4-5-20251001"
-        : options?.model?.startsWith("claude-") ? options.model
-        : "claude-haiku-4-5-20251001";
-      text = await runWithAnthropic(safeMessage, effectiveContext, anthropicModel);
-    } else {
+    if (!openai) {
       return [];
     }
+    text = await runWithOpenAI(safeMessage, effectiveContext, getInferenceModel(options?.model));
 
     if (!text) return [];
 

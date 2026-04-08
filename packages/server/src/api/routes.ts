@@ -36,6 +36,9 @@ import { memoryRoutes } from "./memory.js";
 import { contextRoutes } from "./context.js";
 import { optimizationRoutes } from "./optimization.js";
 import { searchRoutes } from "./search.js";
+import { fileRoutes } from "./files.js";
+import { agentTaskRoutes } from "./agent-tasks.js";
+import { researchAgentRoutes } from "./research-agent.js";
 import { resolveProjectReference, ensureProject, getEffectiveOrgId } from "./helpers.js";
 import { getContractHeaders, getPublicContractMetadata } from "../contracts/runtime.mjs";
 import { getLatencySummary, getLatencyTraceConfig, getLatencyGateStatus, resetLatencySummary } from "../engine/latency-tracing.js";
@@ -206,6 +209,9 @@ api.route("/", memoryRoutes);
 api.route("/", contextRoutes);
 api.route("/", optimizationRoutes);
 api.route("/", searchRoutes);
+api.route("/", fileRoutes);
+api.route("/", agentTaskRoutes);
+api.route("/", researchAgentRoutes);
 
 // ─── Helper ──────────────────────────────────────────────────
 

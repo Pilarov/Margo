@@ -3,6 +3,7 @@ import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { randomUUID } from "crypto";
 import { latencyTraceMiddleware } from "../middleware/latency-trace.js";
+import { maybeSendAlertEmail } from "../engine/alert-email.js";
 
 const STACK_NAME = process.env.RETAINDB_STACK || "ec2";
 
@@ -42,7 +43,7 @@ async function parseErrorResponse(response: Response) {
   const contentType = response.headers.get("content-type") || "";
   if (!contentType.includes("application/json")) return {};
   try {
-    const payload = await response.clone().json() as any;
+    const payload = await response.clone().json();
     return {
       code:
         payload?.error?.code ||
@@ -62,6 +63,27 @@ async function parseErrorResponse(response: Response) {
 }
 
 
+async function maybeAlertRequestError(c: any) {
+  const path = c.req?.path || "";
+  const status = Number(c.res?.status || 0);
+  if (!path.startsWith("/v1/") || status < 400) return;
+  const traceId = getTraceIdFromRequest(c);
+  const parsed = await parseErrorResponse(c.res);
+  const auth = typeof c.get === "function" ? c.get("auth") : undefined;
+  await maybeSendAlertEmail("request.error", {
+    severity: status >= 500 ? "critical" : "warning",
+    status,
+    method: c.req?.method || "",
+    path,
+    errorCode: parsed.code || `HTTP_${status}`,
+    error: parsed.message || `HTTP ${status}`,
+    details: parsed.details || "",
+    traceId,
+    orgId: auth?.orgId || "",
+    userId: auth?.userId || auth?.id || "",
+  });
+}
+
 export function createNodeApp(options: { includeApiRoutes?: boolean; routeApp?: Hono<any, any, any> } = {}) {
   const { includeApiRoutes = true, routeApp } = options;
   const app = new Hono();
@@ -77,7 +99,13 @@ export function createNodeApp(options: { includeApiRoutes?: boolean; routeApp?: 
   app.use("*", latencyTraceMiddleware);
   app.use("*", async (c, next) => {
     c.header("x-retaindb-stack", STACK_NAME);
+    c.header("x-whisper-stack", STACK_NAME);
     await next();
+    try {
+      await maybeAlertRequestError(c);
+    } catch (error) {
+      console.error("[request-error-email] Failed to send request.error alert:", error);
+    }
   });
 
   app.get("/", (c) => {
@@ -118,6 +146,14 @@ export function createNodeApp(options: { includeApiRoutes?: boolean; routeApp?: 
         index_bundle: "POST /v1/index/bundle",
         sync: "POST /v1/sources/:id/sync",
         webhooks: "POST /v1/webhooks",
+        files: "POST /v1/files",
+        agent_tasks: "GET /v1/agent-tasks",
+        research: "POST /v1/research",
+        _legacy_memories_write: "POST /v1/memories [DEPRECATED - use /v1/memory]",
+        _legacy_memories_search: "POST /v1/memories/search [DEPRECATED - use /v1/memory/search]",
+        _legacy_memories_list: "GET /v1/memories [DEPRECATED - use /v1/memory/profile/:userId or /v1/memory/session/:sessionId]",
+        _legacy_memories_update: "PUT /v1/memories/:id [DEPRECATED - use /v1/memory/:memoryId]",
+        _legacy_memories_delete: "DELETE /v1/memories/:id [DEPRECATED - use /v1/memory/:memoryId]",
       },
     });
   });

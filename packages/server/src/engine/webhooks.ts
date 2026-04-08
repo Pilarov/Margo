@@ -1,5 +1,6 @@
 import { randomUUID, createHmac, timingSafeEqual } from "crypto";
 import { prisma } from "../db/index.js";
+import { maybeSendAlertEmail } from "./alert-email.js";
 
 export type WebhookEvent =
   | "request.error"
@@ -49,6 +50,9 @@ export function fireWebhookEvent(
   data: Record<string, any>,
   opts?: { traceId?: string | null; parentTraceId?: string | null; action?: string }
 ): void {
+  maybeSendAlertEmail(event, data).catch((err) => {
+    console.error(`[alert-email] Failed to send ${event}:`, err);
+  });
   deliverWebhooks(orgId, event, data, opts).catch((err) => {
     console.error(`[webhooks] Failed to deliver ${event}:`, err);
   });

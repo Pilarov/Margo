@@ -7,6 +7,7 @@ import { prisma } from "../db/index.js";
 import { ingestDocument } from "./ingest.js";
 import { ingestSession } from "./memory/index.js";
 import { writeMemoryCanonical } from "./memory/write.js";
+import { withRetryableWriteRetries } from "./memory/write-reliability.js";
 
 export type IngestionJobStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
 
@@ -50,6 +51,9 @@ export interface IngestionMemory {
   metadata?: Record<string, any>;
   expires_in_seconds?: number;
 }
+
+const INGESTION_RETRY_MAX_ATTEMPTS = parseInt(process.env.INGESTION_RETRY_MAX_ATTEMPTS || "5", 10);
+const INGESTION_RETRY_BACKOFF_MS = parseInt(process.env.INGESTION_RETRY_BACKOFF_MS || "750", 10);
 
 export interface IngestionConversation {
   session_id?: string;
@@ -361,33 +365,41 @@ class IngestionQueue {
           : null;
         const documentDate = metadata.document_date ? new Date(metadata.document_date) : null;
         const eventDate = metadata.event_date ? new Date(metadata.event_date) : null;
-        const writeResult = await writeMemoryCanonical({
-          projectId: job.project_id,
-          orgId: job.org_id,
-          userId: metadata.user_id || null,
-          sessionId: metadata.session_id || null,
-          agentId: metadata.agent_id || null,
-          taskId: metadata.task_id || null,
-          content: doc.content,
-          memoryType: metadata.memory_type || "factual",
-          importance: metadata.importance || 0.5,
-          confidenceRaw: metadata.confidence_raw || metadata.confidence || 0.8,
-          entityMentions: metadata.entity_mentions || [],
-          documentDate,
-          eventDate,
-          expiresAt,
-          metadata: {
-            ...(metadata || {}),
-            namespace,
-            tags,
-          },
-          writeSource: metadata.write_source || "ingestion_queue.memory",
-          writeMode: metadata.write_mode || "direct_write",
-          extractionMethod: metadata.extraction_method || "manual",
-          scopeHint: metadata.scope_target || undefined,
-          promotionMode: metadata.promotion_mode || undefined,
-          sessionRetentionDays: 14,
-        });
+        const writeResult = await withRetryableWriteRetries(
+          () =>
+            writeMemoryCanonical({
+              projectId: job.project_id,
+              orgId: job.org_id,
+              userId: metadata.user_id || null,
+              sessionId: metadata.session_id || null,
+              agentId: metadata.agent_id || null,
+              taskId: metadata.task_id || null,
+              content: doc.content,
+              memoryType: metadata.memory_type || "factual",
+              importance: metadata.importance || 0.5,
+              confidenceRaw: metadata.confidence_raw || metadata.confidence || 0.8,
+              entityMentions: metadata.entity_mentions || [],
+              documentDate,
+              eventDate,
+              expiresAt,
+              metadata: {
+                ...(metadata || {}),
+                namespace,
+                tags,
+              },
+              writeSource: metadata.write_source || "ingestion_queue.memory",
+              writeMode: metadata.write_mode || "direct_write",
+              extractionMethod: metadata.extraction_method || "manual",
+              scopeHint: metadata.scope_target || undefined,
+              promotionMode: metadata.promotion_mode || undefined,
+              sessionRetentionDays: 14,
+            }),
+          {
+            maxAttempts: INGESTION_RETRY_MAX_ATTEMPTS,
+            baseDelayMs: INGESTION_RETRY_BACKOFF_MS,
+            label: "IngestionQueue.writeMemory",
+          }
+        );
 
         if (writeResult.outcome === "dropped") {
           await prisma.$executeRaw`

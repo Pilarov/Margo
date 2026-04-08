@@ -36,7 +36,12 @@ export const db = globalForPrisma.prisma ?? new PrismaClient({
 });
 export const prisma = db;
 
-
+// Single middleware — converts BigInt to string at the DB boundary.
+// Arrays are already covered by the object branch since Array is also typeof "object".
+prisma.$use(async (params, next) => {
+  const result = await next(params);
+  return hasBigInt(result) ? convertBigIntToString(result) : result;
+});
 
 // Fast check before doing full recursive traversal
 function hasBigInt(obj: any): boolean {
@@ -76,5 +81,14 @@ export type {
   EntityRelation,
   Memory,
   MemoryRelation,
+  Session,
+  Message,
   ChunkMemory,
+  SyncJob,
+  Webhook,
+  WebhookDelivery,
+  SharedFile,
+  AgentTask,
+  AgentRun,
+  AgentRunStep,
 } from "@prisma/client";

@@ -9,6 +9,21 @@ function getOpenAIClient() {
   });
 }
 
+function shouldRetryWithoutStructuredOutput(err: any): boolean {
+  const message = String(err?.message || "");
+  return err?.status === 400 && /Failed to generate JSON|Failed to validate JSON|tool_use_failed|json_validate_failed/i.test(message);
+}
+
+function getProviderSpecificModelParams(model: string) {
+  if (/^qwen\/qwen3-/i.test(model)) {
+    return {
+      reasoning_format: "hidden",
+      reasoning_effort: "none",
+    };
+  }
+  return {};
+}
+
 // ── Zod schema ────────────────────────────────────────────────────────────────
 
 const MEMORY_TYPES = [
@@ -16,6 +31,23 @@ const MEMORY_TYPES = [
 ] as const;
 
 const TEMPORAL_PRECISIONS = ["exact", "inferred_day", "inferred_month", "unknown"] as const;
+const TEMPORAL_PRECISION_MAP: Record<string, typeof TEMPORAL_PRECISIONS[number]> = {
+  exact: "exact",
+  day: "inferred_day",
+  inferred_day: "inferred_day",
+  inferred_date: "inferred_day",
+  implicit_day: "inferred_day",
+  implicit_date: "inferred_day",
+  inferred: "inferred_day",
+  month: "inferred_month",
+  inferred_month: "inferred_month",
+  implicit_month: "inferred_month",
+  approximate_month: "inferred_month",
+  approx_month: "inferred_month",
+  unknown: "unknown",
+  none: "unknown",
+  null: "unknown",
+};
 
 const MemorySchema = z.object({
   content: z.string().min(10).max(500),
@@ -107,6 +139,7 @@ export async function extractMemories(
       { role: "system", content: SYSTEM_PROMPT },
       { role: "user", content: userPrompt },
     ],
+    ...getProviderSpecificModelParams(model),
     ...(isGpt5
       ? {
           max_completion_tokens: 1024,
@@ -148,6 +181,14 @@ export async function extractMemories(
           response_format: { type: "json_object" },
         }),
   };
+  const fallbackCreateParams: any = {
+    ...createParams,
+    messages: [
+      { role: "system", content: `${SYSTEM_PROMPT}\n\nReturn ONLY valid JSON. Do not use markdown fences or any extra commentary.` },
+      { role: "user", content: `${userPrompt}\n\nReturn ONLY valid JSON with a top-level "memories" array.` },
+    ],
+  };
+  delete fallbackCreateParams.response_format;
 
   let raw: RawMemory[];
   try {
@@ -158,6 +199,10 @@ export async function extractMemories(
         response = await getOpenAIClient().chat.completions.create(createParams);
         break;
       } catch (err: any) {
+        if (shouldRetryWithoutStructuredOutput(err)) {
+          response = await getOpenAIClient().chat.completions.create(fallbackCreateParams);
+          break;
+        }
         if (err?.status === 429 && attempt < 2) {
           const retryAfterMs = parseInt(err?.headers?.["retry-after-ms"] || "2000", 10);
           await new Promise(r => setTimeout(r, retryAfterMs + 500));
@@ -175,9 +220,19 @@ export async function extractMemories(
 
     let parsed: unknown;
     try {
-      // Strip markdown code fences if present (some models wrap JSON in ```json ... ```)
-      const jsonText = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "").trim();
-      parsed = JSON.parse(jsonText);
+      // Strip markdown fences and hidden reasoning wrappers if present.
+      const cleanedText = text
+        .replace(/<think>[\s\S]*?<\/think>/gi, "")
+        .replace(/^```(?:json)?\s*/i, "")
+        .replace(/\s*```\s*$/, "")
+        .trim();
+      try {
+        parsed = JSON.parse(cleanedText);
+      } catch {
+        const jsonMatch = cleanedText.match(/\{[\s\S]*\}/) ?? cleanedText.match(/\[[\s\S]*\]/);
+        if (!jsonMatch) throw new Error("No JSON object or array found in model output");
+        parsed = JSON.parse(jsonMatch[0]);
+      }
     } catch (e) {
       console.error("[extractor] JSON parse failed:", (e as Error).message, "| text:", text.slice(0, 200));
       return [];
@@ -199,15 +254,63 @@ export async function extractMemories(
       const v = String(raw).toLowerCase().trim();
       return MEMORY_TYPE_MAP[v] ?? (MEMORY_TYPES.includes(v as any) ? v : "factual");
     };
+    const normalizeText = (raw: any, maxLen: number): string | undefined => {
+      if (raw == null) return undefined;
+      const text = String(raw).trim();
+      if (!text) return undefined;
+      return text.slice(0, maxLen);
+    };
+    const normalizeEntityMentions = (raw: any): string[] => {
+      const values = Array.isArray(raw) ? raw : raw == null ? [] : [raw];
+      const normalized = values
+        .map((value) => {
+          if (typeof value === "string") return value.trim();
+          if (value && typeof value === "object") {
+            return String(
+              value.name
+                ?? value.entity
+                ?? value.text
+                ?? value.label
+                ?? ""
+            ).trim();
+          }
+          return String(value ?? "").trim();
+        })
+        .filter(Boolean)
+        .map((value) => value.slice(0, 100));
+      return Array.from(new Set(normalized)).slice(0, 10);
+    };
+    const normalizeTemporalPrecision = (raw: any): RawMemory["temporalPrecision"] => {
+      if (!raw) return "unknown";
+      const v = String(raw).toLowerCase().trim();
+      return TEMPORAL_PRECISION_MAP[v] ?? "unknown";
+    };
+    const normalizeEventDate = (raw: any): string | null => {
+      if (raw == null || raw === "") return null;
+      if (typeof raw === "string") return raw;
+      if (typeof raw === "object") {
+        const nested = raw.date ?? raw.value ?? raw.isoDate ?? raw.iso_date ?? null;
+        return typeof nested === "string" && nested.trim() ? nested : null;
+      }
+      return null;
+    };
+    const normalizeConfidence = (raw: any): number => {
+      if (typeof raw === "number" && Number.isFinite(raw)) return raw;
+      if (typeof raw === "string") {
+        const parsed = parseFloat(raw);
+        if (Number.isFinite(parsed)) return parsed;
+      }
+      return 0.8;
+    };
     const normalize = (item: any) => ({
       content: item.content ?? item.memory ?? item.text ?? item.description ?? item.fact ?? item.statement,
       memoryType: normalizeMemoryType(item.memoryType ?? item.memory_type ?? item.type ?? item.category),
-      entityMentions: item.entityMentions ?? item.entity_mentions ?? item.entities ?? item.people ?? [],
-      eventDate: item.eventDate ?? item.event_date ?? item.date ?? null,
-      temporalPrecision: item.temporalPrecision ?? item.temporal_precision ?? "unknown",
-      confidence: item.confidence ?? item.score ?? 0.8,
-      reasoning: item.reasoning,
-      sourceSpan: item.sourceSpan ?? item.source_span ?? item.source,
+      entityMentions: normalizeEntityMentions(item.entityMentions ?? item.entity_mentions ?? item.entities ?? item.people),
+      eventDate: normalizeEventDate(item.eventDate ?? item.event_date ?? item.date),
+      temporalPrecision: normalizeTemporalPrecision(item.temporalPrecision ?? item.temporal_precision),
+      confidence: normalizeConfidence(item.confidence ?? item.score),
+      reasoning: normalizeText(item.reasoning, 200),
+      sourceSpan: normalizeText(item.sourceSpan ?? item.source_span ?? item.source, 150),
     });
 
     const rawParsed = (parsed as any)?.memories ?? parsed;

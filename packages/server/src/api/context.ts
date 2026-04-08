@@ -9,8 +9,8 @@ import { z } from "zod";
 import { prisma } from "../db/index.js";
 import type { AuthContext } from "../middleware/auth.js";
 import { rateLimitMiddleware, RateLimits } from "../middleware/rate-limit.js";
-
 import { oracleSearch, oracleResearch } from "../engine/oracle.js";
+import { autosubscribe } from "../engine/autosubscribe.js";
 import {
   createSharedContext,
   loadSharedContext,
@@ -93,6 +93,59 @@ contextRoutes.post(
     } catch (error) {
       console.error("Oracle search error:", error);
       return c.json({ error: "Oracle search failed" }, 500);
+    }
+  }
+);
+
+// ──────────────────────────────────────────────────────────────
+// Autosubscribe - Auto-index project dependencies
+// ──────────────────────────────────────────────────────────────
+
+contextRoutes.post(
+  "/v1/autosubscribe",
+  rateLimitMiddleware(RateLimits.mutation),
+  zValidator(
+    "json",
+    z.object({
+      project: z.string().optional(),
+      source: z.object({
+        type: z.enum(["github", "local"]),
+        owner: z.string().optional(),
+        repo: z.string().optional(),
+        path: z.string().optional(),
+      }),
+      dependency_file: z
+        .enum(["package.json", "requirements.txt", "Cargo.toml", "go.mod", "Gemfile"])
+        .optional(),
+      index_limit: z.number().int().min(1).max(50).optional().default(20),
+      auto_sync: z.boolean().optional().default(true),
+    })
+  ),
+  async (c) => {
+    const auth = c.get("auth");
+    const body = c.req.valid("json");
+
+    try {
+      const project = await ensureProject(auth.orgId, body.project, auth.isAdmin);
+
+      const result = await autosubscribe({
+        projectId: project.id,
+        orgId: auth.orgId,
+        source: body.source,
+        indexLimit: body.index_limit,
+      });
+
+      return c.json({
+        success: true,
+        discovered: result.discovered,
+        indexed: result.indexed,
+        skipped: result.skipped,
+        errors: result.errors,
+        auto_sync_enabled: body.auto_sync,
+      });
+    } catch (error) {
+      console.error("Autosubscribe error:", error);
+      return c.json({ error: "Autosubscribe failed" }, 500);
     }
   }
 );

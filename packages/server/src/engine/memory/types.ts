@@ -123,6 +123,8 @@ export interface MemorySearchParams {
   tags?: string[];
   /** Fast mode skips graph traversal and chunk injection for sub-50ms latency */
   fastMode?: boolean;
+  /** Preserve full-quality retrieval even if latency guardrails would normally degrade the pipeline */
+  disableLatencyDegradation?: boolean;
   diagnosticsCollector?: (diagnostics: MemorySearchDiagnostics) => void;
 }
 

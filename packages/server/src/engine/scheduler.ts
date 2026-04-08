@@ -6,6 +6,7 @@ import {
   pruneSupersededSourceVersions,
   purgeExpiredDeletedSources,
 } from "./source-versions.js";
+import { runSessionLifecycle } from "./memory/session-lifecycle.js";
 
 // ─── Cron Parser ────────────────────────────────────────────
 // Lightweight cron matching — supports: minute hour dayOfMonth month dayOfWeek
@@ -81,6 +82,11 @@ let schedulerInterval: ReturnType<typeof setInterval> | null = null;
 let isRunning = false;
 let maintenanceRunning = false;
 let lastMaintenanceAt = 0;
+let lastSessionLifecycleAt = 0;
+const SESSION_LIFECYCLE_INTERVAL_MS = parseInt(
+  process.env.SESSION_LIFECYCLE_INTERVAL_MS ?? "600000", // 10 min default
+  10
+);
 const MAINTENANCE_INTERVAL_MS = Math.max(
   parseInt(process.env.OPS_MAINTENANCE_INTERVAL_MS || "600000", 10),
   60_000
@@ -100,9 +106,11 @@ export function startScheduler() {
   // Run immediately on start, then every 60 seconds
   runScheduledSyncs();
   runOperationalMaintenance();
+  runSessionLifecycleTick();
   schedulerInterval = setInterval(() => {
     void runScheduledSyncs();
     void runOperationalMaintenance();
+    void runSessionLifecycleTick();
   }, 60_000);
 }
 
@@ -114,6 +122,20 @@ export function stopScheduler() {
     clearInterval(schedulerInterval);
     schedulerInterval = null;
     console.log("[scheduler] Scheduler stopped");
+  }
+}
+
+/**
+ * Rate-limited wrapper — runs session lifecycle at most once per SESSION_LIFECYCLE_INTERVAL_MS.
+ */
+async function runSessionLifecycleTick() {
+  const now = Date.now();
+  if (now - lastSessionLifecycleAt < SESSION_LIFECYCLE_INTERVAL_MS) return;
+  lastSessionLifecycleAt = now;
+  try {
+    await runSessionLifecycle();
+  } catch (err) {
+    console.error("[scheduler] Session lifecycle tick failed:", err);
   }
 }
 

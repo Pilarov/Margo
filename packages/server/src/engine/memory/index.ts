@@ -49,6 +49,12 @@ export {
   getUserProfile,
 } from "./search.js";
 
+// User Intelligence
+export {
+  synthesizeUserModel,
+  detectUserGaps,
+} from "./user-model.js";
+
 // Memory Ingestion
 export {
   ingestSession,
@@ -65,5 +71,6 @@ export {
   SESSION_ONLY_THRESHOLD,
   TASK_SCOPE_THRESHOLD,
   USER_PROFILE_THRESHOLD,
+  USER_CROSS_SESSION_THRESHOLD,
   writeMemoryCanonical,
 } from "./write.js";

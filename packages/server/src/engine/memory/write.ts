@@ -13,6 +13,10 @@ import { encrypt, decrypt } from "../../lib/encryption.js";
 
 export const MEMORY_WRITE_POLICY_VERSION = "memory_write_v2";
 export const USER_PROFILE_THRESHOLD = 0.82;
+// Lower threshold for user-identity types (preference, goal, opinion, instruction, factual).
+// These are the memories that MUST survive across sessions — anything above 0.68 is clear
+// enough signal to write to USER scope immediately rather than trapping in SESSION.
+export const USER_CROSS_SESSION_THRESHOLD = 0.68;
 export const PROJECT_SCOPE_THRESHOLD = 0.76;
 export const AGENT_SCOPE_THRESHOLD = 0.74;
 export const TASK_SCOPE_THRESHOLD = 0.72;
@@ -271,12 +275,19 @@ function inferScopeTarget(
     return input.sessionId && confidenceCalibrated >= SESSION_ONLY_THRESHOLD ? "SESSION" : "DROPPED";
   }
 
+  // Cross-session types: preference/goal/opinion/instruction/factual.
+  // Use the lower USER_CROSS_SESSION_THRESHOLD so moderate-confidence memories
+  // survive across sessions rather than dying in SESSION scope.
   if (normalizedType === "preference" || normalizedType === "goal" || normalizedType === "opinion") {
-    if (confidenceCalibrated >= USER_PROFILE_THRESHOLD && canCreateUserScopedMemory(input)) return "USER";
+    if (confidenceCalibrated >= USER_CROSS_SESSION_THRESHOLD && canCreateUserScopedMemory(input)) return "USER";
+  }
+
+  if (normalizedType === "factual" && canCreateUserScopedMemory(input)) {
+    if (confidenceCalibrated >= USER_CROSS_SESSION_THRESHOLD) return "USER";
   }
 
   if (normalizedType === "instruction") {
-    if (confidenceCalibrated >= USER_PROFILE_THRESHOLD && canCreateUserScopedMemory(input)) return "USER";
+    if (confidenceCalibrated >= USER_CROSS_SESSION_THRESHOLD && canCreateUserScopedMemory(input)) return "USER";
     if (confidenceCalibrated >= AGENT_SCOPE_THRESHOLD && input.agentId) return "AGENT";
     if (confidenceCalibrated >= TASK_SCOPE_THRESHOLD && input.taskId) return "TASK";
     if (confidenceCalibrated >= PROJECT_SCOPE_THRESHOLD) return "PROJECT";
@@ -430,8 +441,23 @@ function calibrateWriteConfidence(input: {
   return clamp01(calibrated);
 }
 
-async function auditBypassViolation(_input: CanonicalMemoryWriteInput): Promise<void> {
-  // Audit logging not available in OSS
+async function auditBypassViolation(input: CanonicalMemoryWriteInput): Promise<void> {
+  try {
+    const { writeAuditLog } = await import("../../lib/audit.js");
+    await writeAuditLog({
+      action: "memory_write_bypass_rejected",
+      resource: "memory",
+      outcome: "failure",
+      traceId: `bypass-${Date.now()}`,
+      metadata: {
+        write_source: input.writeSource,
+        write_mode: input.writeMode,
+        extraction_method: input.extractionMethod,
+      },
+    });
+  } catch {
+    // Best-effort audit only.
+  }
 }
 
 async function fetchComparableMemories(input: CanonicalMemoryWriteInput): Promise<ExistingMemory[]> {

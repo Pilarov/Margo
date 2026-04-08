@@ -30,6 +30,7 @@ model Project {
   ingestionJobs    IngestionJob[]
   sessions         Session[]
   sharedContexts   SharedContext[]
+  sharedFiles      SharedFile[]
 
   @@index([slug])
   @@map("projects")
@@ -477,6 +478,179 @@ model ApiIdempotency {
   @@unique([orgId, endpoint, idempotencyKey])
   @@index([expiresAt])
   @@map("api_idempotency")
+}
+
+// ── Shared File Storage ───────────────────────────────────────────────────────
+
+model SharedFile {
+  id          String    @id @default(uuid())
+  orgId       String    @default("default")
+  projectId   String?
+  userId      String?
+  agentId     String?
+  path        String
+  name        String
+  mimeType    String?
+  size        BigInt    @default(0)
+  storageKey  String
+  scope       String    @default("PROJECT")
+  isPublic    Boolean   @default(false)
+  contentHash String?
+  metadata    Json      @default("{}")
+  memoryId    String?
+  memoryIds   String[]  @default([])
+  deletedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  project     Project?  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, path])
+  @@index([orgId, scope])
+  @@index([orgId, agentId])
+  @@index([projectId])
+  @@index([deletedAt])
+  @@map("shared_files")
+}
+
+// ── Agent Tasks (browser automation) ─────────────────────────────────────────
+
+model AgentTask {
+  id           String    @id @default(uuid())
+  orgId        String    @default("default")
+  userId       String    @default("")
+  name         String
+  goal         String
+  outputSchema Json      @default("{}")
+  template     String?
+  schedule     String?
+  options      Json      @default("{}")
+  credentials  Json      @default("[]")
+  webhookUrl   String?
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  runs         AgentRun[]
+
+  @@index([orgId])
+  @@map("agent_tasks")
+}
+
+model AgentRun {
+  id           String    @id @default(uuid())
+  taskId       String?
+  orgId        String    @default("default")
+  userId       String    @default("")
+  goal         String
+  plan         Json?
+  result       Json?
+  tokensUsed   Int       @default(0)
+  status       String    @default("PLANNING")
+  totalSteps   Int       @default(0)
+  pagesVisited Int       @default(0)
+  costUsd      Float     @default(0)
+  hitlMessage  String?
+  errorMsg     String?
+  startedAt    DateTime  @default(now())
+  completedAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  task         AgentTask? @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  steps        AgentRunStep[]
+
+  @@index([orgId])
+  @@index([taskId])
+  @@index([status])
+  @@map("agent_runs")
+}
+
+model AgentRunStep {
+  id          String   @id @default(uuid())
+  runId       String
+  stepIndex   Int
+  type        String
+  description String   @default("")
+  input       Json     @default("{}")
+  output      Json     @default("{}")
+  screenshot  String?
+  confidence  Float    @default(0)
+  durationMs  Int      @default(0)
+  error       String?
+  createdAt   DateTime @default(now())
+
+  run         AgentRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId])
+  @@map("agent_run_steps")
+}
+
+model PageCache {
+  id          String   @id @default(uuid())
+  orgId       String   @default("default")
+  url         String
+  title       String   @default("")
+  content     String   @default("")
+  html        String   @default("")
+  contentHash String?
+  links       Json     @default("[]")
+  screenshot  String?
+  lastFetched DateTime @default(now())
+  expiresAt   DateTime @default(dbgenerated("NOW() + INTERVAL '1 day'"))
+
+  @@unique([orgId, url])
+  @@index([expiresAt])
+  @@map("page_cache")
+}
+
+model AgentCredential {
+  id        String   @id @default(uuid())
+  orgId     String   @default("default")
+  name      String
+  domain    String
+  encrypted Json     @default("{}")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orgId])
+  @@map("agent_credentials")
+}
+
+// ── User-Agent Persistent Memory ──────────────────────────────────────────────
+
+model UserAgentMemory {
+  id                 String   @id @default(uuid())
+  userId             String
+  orgId              String?
+  agentPersonality   String   @default("helpful, thoughtful, curious, systematic")
+  learnedPreferences Json     @default("{}")
+  selfNotes          String   @default("")
+  interactionCount   Int      @default(0)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@unique([userId, orgId])
+  @@index([orgId])
+  @@map("user_agent_memories")
+}
+
+model AgentResearchSession {
+  id             String   @id @default(uuid())
+  userId         String
+  orgId          String?
+  projectId      String?
+  query          String
+  answer         String   @default("")
+  sources        Json     @default("[]")
+  steps          Int      @default(0)
+  durationMs     Int      @default(0)
+  isDeepResearch Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  @@index([userId])
+  @@index([orgId])
+  @@map("agent_research_sessions")
 }
 
 // ── Webhooks ──────────────────────────────────────────────────────────────────

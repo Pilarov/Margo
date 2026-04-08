@@ -127,7 +127,7 @@ export async function createSharedContext(params: {
       where: {
         OR: [
           { sessionId: session.id },
-          { sessionId: session.id },
+          { conversationId: session.id },
         ],
       },
       orderBy: { createdAt: "asc" },
@@ -348,6 +348,7 @@ export async function resumeFromSharedContext(params: {
       await db.message.create({
         data: {
           sessionId,
+          conversationId: sessionId,
           role: msg.role,
           content: msg.content,
           metadata: {

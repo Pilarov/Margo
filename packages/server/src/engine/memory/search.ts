@@ -102,6 +102,18 @@ function rerankByIntent(memories: any[], questionDate: Date | undefined, intent:
 
 const DEBUG_TIMINGS = process.env.MEMORY_SEARCH_DEBUG_TIMINGS === "true";
 
+function isTruthyEnv(value: string | undefined): boolean {
+  const normalized = (value || "").trim().toLowerCase();
+  return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
+}
+
+function shouldDisableLatencyDegradation(params: Pick<MemorySearchParams, "disableLatencyDegradation">): boolean {
+  if (typeof params.disableLatencyDegradation === "boolean") {
+    return params.disableLatencyDegradation;
+  }
+  return isTruthyEnv(process.env.MEMORY_SEARCH_DISABLE_LATENCY_DEGRADATION);
+}
+
 function logTimings(timings: TimingLog[], _query: string): void {
   // Only log full timing breakdown in explicit debug mode — queries contain user data.
   if (!DEBUG_TIMINGS) return;
@@ -198,6 +210,7 @@ export async function searchMemories(
 ): Promise<MemorySearchResult[]> {
   const timings: TimingLog[] = [];
   const startTotal = Date.now();
+  const disableLatencyDegradation = shouldDisableLatencyDegradation(params);
 
   const {
     query,
@@ -290,7 +303,7 @@ export async function searchMemories(
   const scopedSemanticResults = rerankByScope(semanticResults, { userId, sessionId, agentId, taskId });
 
   // Guardrail: if we're already over budget after vector search, degrade to fast mode.
-  if (!effectiveFastMode && Date.now() - startTotal > POST_VECTOR_BUDGET_MS) {
+  if (!disableLatencyDegradation && !effectiveFastMode && Date.now() - startTotal > POST_VECTOR_BUDGET_MS) {
     effectiveFastMode = true;
     timings.push({ step: "degraded_mode_fast_after_vector", duration: 0 });
     console.warn(`[MemorySearch] Degraded to fast mode after vector stage (budget=${POST_VECTOR_BUDGET_MS}ms)`);
@@ -366,7 +379,10 @@ export async function searchMemories(
 
   // Step 5: Inject source chunks for context (skip in fast mode)
   let results: MemorySearchResult[];
-  const shouldSkipChunkInjection = !effectiveFastMode && (Date.now() - startTotal > CHUNK_INJECTION_GUARDRAIL_MS);
+  const shouldSkipChunkInjection =
+    !disableLatencyDegradation &&
+    !effectiveFastMode &&
+    (Date.now() - startTotal > CHUNK_INJECTION_GUARDRAIL_MS);
   if (shouldSkipChunkInjection) {
     timings.push({ step: "degraded_mode_skip_chunk_injection", duration: 0 });
     console.warn(`[MemorySearch] Skipping chunk injection near SLO budget (guardrail=${CHUNK_INJECTION_GUARDRAIL_MS}ms)`);

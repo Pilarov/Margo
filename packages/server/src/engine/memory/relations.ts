@@ -7,9 +7,48 @@
 import OpenAI from "openai";
 import type { MemoryRelationship, RelationType } from "./types.js";
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY || "",
-});
+function getOpenAI() {
+  return new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY || "",
+    ...(process.env.OPENAI_BASE_URL ? { baseURL: process.env.OPENAI_BASE_URL } : {}),
+  });
+}
+
+function getRelationModel(): string {
+  return process.env.RELATION_MODEL || process.env.EXTRACTOR_MODEL || process.env.OPENAI_MODEL || "gpt-5.4-mini";
+}
+
+function getMaxOutputTokensParam(model: string, maxTokens: number) {
+  return /^gpt-5/i.test(model)
+    ? { max_completion_tokens: maxTokens }
+    : { max_tokens: maxTokens };
+}
+
+function getProviderSpecificModelParams(model: string) {
+  if (/^qwen\/qwen3-/i.test(model)) {
+    return {
+      reasoning_format: "hidden" as const,
+    };
+  }
+  return {};
+}
+
+function parseRelationsPayload(text: string): any[] {
+  const trimmed = String(text || "").trim();
+  if (!trimmed) return [];
+  const withoutFences = trimmed.replace(/```json\s*|\s*```/gi, "").trim();
+  const arrayMatch = withoutFences.match(/\[[\s\S]*\]/);
+  if (arrayMatch) {
+    return JSON.parse(arrayMatch[0]);
+  }
+  const objectMatch = withoutFences.match(/\{[\s\S]*\}/);
+  if (objectMatch) {
+    const parsed = JSON.parse(objectMatch[0]);
+    if (Array.isArray(parsed)) return parsed;
+    if (Array.isArray(parsed.relations)) return parsed.relations;
+  }
+  return [];
+}
 
 const RELATION_DETECTION_PROMPT = `You are an expert at detecting relationships between memories in a knowledge graph.
 
@@ -101,11 +140,13 @@ Return a JSON array of relations:
 Return ONLY the JSON array. If no relations found, return [].`;
 
   try {
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o",
-      max_tokens: 2048,
+    const model = getRelationModel();
+    const response = await getOpenAI().chat.completions.create({
+      model,
+      ...getMaxOutputTokensParam(model, 2048),
       temperature: 0.0,
       messages: [{ role: "user", content: prompt }],
+      ...getProviderSpecificModelParams(model),
       response_format: { type: "json_object" },
     });
 
@@ -113,10 +154,8 @@ Return ONLY the JSON array. If no relations found, return [].`;
     if (!text) {
       return [];
     }
-    const jsonMatch = text.match(/```json\n?([\s\S]*?)\n?```/) || text.match(/\[[\s\S]*\]/);
-    const jsonStr = jsonMatch ? (jsonMatch[1] || jsonMatch[0]) : text;
 
-    const relations = JSON.parse(jsonStr);
+    const relations = parseRelationsPayload(text);
 
     if (!Array.isArray(relations)) {
       return [];

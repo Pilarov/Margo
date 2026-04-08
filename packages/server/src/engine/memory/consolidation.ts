@@ -7,9 +7,22 @@ import OpenAI from "openai";
 import { db } from "../../db/index.js";
 import { embedSingle } from "../embeddings.js";
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY || "",
-});
+function getOpenAI() {
+  return new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY || "",
+    ...(process.env.OPENAI_BASE_URL ? { baseURL: process.env.OPENAI_BASE_URL } : {}),
+  });
+}
+
+function getConsolidationModel(): string {
+  return process.env.CONSOLIDATION_MODEL || process.env.OPENAI_MODEL || "gpt-5.4-mini";
+}
+
+function getMaxOutputTokensParam(model: string, maxTokens: number) {
+  return /^gpt-5/i.test(model)
+    ? { max_completion_tokens: maxTokens }
+    : { max_tokens: maxTokens };
+}
 
 interface MemoryCluster {
   representative: any; // Most important memory in cluster
@@ -147,9 +160,10 @@ Return JSON:
   "reasoning": "brief explanation of how you merged"
 }`;
 
-  const response = await openai.chat.completions.create({
-    model: "gpt-4o",
-    max_tokens: 2048,
+  const model = getConsolidationModel();
+  const response = await getOpenAI().chat.completions.create({
+    model,
+    ...getMaxOutputTokensParam(model, 2048),
     temperature: 0.0,
     messages: [{ role: "user", content: prompt }],
     response_format: { type: "json_object" },
@@ -168,7 +182,7 @@ Return JSON:
   // Create merged memory
   const embedding = await embedSingle(result.merged_content);
 
-  const mergedMemory = await (db.memory.create as any)({
+  const mergedMemory = await db.memory.create({
     data: {
       projectId: cluster.representative.projectId,
       orgId: cluster.representative.orgId,
