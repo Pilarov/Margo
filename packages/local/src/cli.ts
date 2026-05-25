@@ -1102,11 +1102,12 @@ function mcpEnv(baseUrl: string, project: string) {
 function connectConfig(target: string, baseUrl: string, project: string) {
   const env = mcpEnv(baseUrl, project);
   const hookCommand = ["npx", "-y", "@retaindb/local", "hook"];
+  const mcpCommand = ["npx", "-y", "@retaindb/local", "mcp"];
   if (target === "codex") {
     return [
       "[mcp_servers.retaindb]",
       'command = "npx"',
-      'args = ["-y", "@retaindb/mcp"]',
+      'args = ["-y", "@retaindb/local", "mcp"]',
       "",
       "[mcp_servers.retaindb.env]",
       `RETAINDB_BASE_URL = "${baseUrl}"`,
@@ -1118,13 +1119,13 @@ function connectConfig(target: string, baseUrl: string, project: string) {
   }
   if (target === "opencode") {
     return JSON.stringify({
-      mcp: { retaindb: { type: "local", command: ["npx", "-y", "@retaindb/mcp"], env, enabled: true } },
+      mcp: { retaindb: { type: "local", command: mcpCommand, env, enabled: true } },
       plugin: ["./.retaindb/opencode/retaindb-capture.ts"],
       hooks: { postToolUse: hookCommand.concat(["--kind=tool_result", "--agent=opencode"]) },
     }, null, 2);
   }
   return JSON.stringify({
-    mcpServers: { retaindb: { command: "npx", args: ["-y", "@retaindb/mcp"], env } },
+    mcpServers: { retaindb: { command: "npx", args: ["-y", "@retaindb/local", "mcp"], env } },
     hooks: {
       UserPromptSubmit: hookCommand.concat(["--kind=prompt", "--agent=claude-code"]),
       PostToolUse: hookCommand.concat(["--kind=tool_result", "--agent=claude-code"]),
@@ -1272,7 +1273,7 @@ function installClaudeConfig(baseUrl: string, project: string) {
   const config = readJsonFile(path);
   config.mcpServers = {
     ...(config.mcpServers || {}),
-    retaindb: { command: "npx", args: ["-y", "@retaindb/mcp"], env: mcpEnv(baseUrl, project) },
+    retaindb: { command: "npx", args: ["-y", "@retaindb/local", "mcp"], env: mcpEnv(baseUrl, project) },
   };
   writeJsonFile(path, config);
   const settingsPath = join(homedir(), ".claude", "settings.json");
@@ -1285,6 +1286,74 @@ function installClaudeConfig(baseUrl: string, project: string) {
   };
   writeJsonFile(settingsPath, settings);
   return `${path}, ${settingsPath}`;
+}
+
+async function runMcp() {
+  const [{ McpServer }, { StdioServerTransport }, zod] = await Promise.all([
+    import("@modelcontextprotocol/sdk/server/mcp.js"),
+    import("@modelcontextprotocol/sdk/server/stdio.js"),
+    import("zod"),
+  ]);
+  const z = zod.z;
+  const baseUrl = (process.env.RETAINDB_BASE_URL || `http://localhost:${DEFAULT_PORT}`).replace(/\/+$/, "");
+  const project = process.env.RETAINDB_PROJECT || DEFAULT_PROJECT;
+  const server = new McpServer({ name: "retaindb-local", version: "0.1.0" });
+  const post = async (path: string, body: Record<string, unknown>) => {
+    const res = await fetch(`${baseUrl}${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ project, ...body }),
+    });
+    return res.json();
+  };
+  const get = async (path: string) => {
+    const res = await fetch(`${baseUrl}${path}`);
+    return res.json();
+  };
+  const out = (value: unknown) => ({ content: [{ type: "text" as const, text: typeof value === "string" ? value : JSON.stringify(value, null, 2) }] });
+
+  server.tool("context", "Retrieve packed RetainDB Local context for the current task.", {
+    query: z.string(),
+    user_id: z.string().optional(),
+    session_id: z.string().optional(),
+    top_k: z.number().optional(),
+  }, async (args: any) => out(await post("/v1/context/query", args)));
+
+  server.tool("remember", "Save a durable memory to RetainDB Local.", {
+    content: z.string(),
+    memory_type: z.string().optional(),
+    user_id: z.string().optional(),
+    session_id: z.string().optional(),
+    importance: z.number().optional(),
+  }, async (args: any) => out(await post("/v1/memory", args)));
+
+  server.tool("recall", "Search RetainDB Local memories.", {
+    query: z.string(),
+    user_id: z.string().optional(),
+    session_id: z.string().optional(),
+    top_k: z.number().optional(),
+  }, async (args: any) => out(await post("/v1/memory/search", args)));
+
+  server.tool("session_history", "List memories for a RetainDB Local session.", {
+    session_id: z.string(),
+    limit: z.number().optional(),
+  }, async (args: any) => out(await get(`/v1/memory/session/${encodeURIComponent(args.session_id)}?project=${encodeURIComponent(project)}&limit=${encodeURIComponent(String(args.limit || 30))}`)));
+
+  server.tool("handoff", "Create a session handoff from RetainDB Local memories.", {
+    session_id: z.string(),
+    title: z.string().optional(),
+    expiry_days: z.number().optional(),
+  }, async (args: any) => out(await post("/v1/context/share", args)));
+
+  server.tool("forget", "Delete or deactivate a RetainDB Local memory by ID.", {
+    memory_id: z.string(),
+  }, async (args: any) => {
+    const res = await fetch(`${baseUrl}/v1/memory/${encodeURIComponent(args.memory_id)}`, { method: "DELETE" });
+    return out(await res.json());
+  });
+
+  await server.connect(new StdioServerTransport());
+  console.error(`[retaindb-local] MCP running on stdio (${baseUrl}, project: ${project})`);
 }
 
 function installUserConfigs(target = "all") {
@@ -1523,6 +1592,7 @@ function startServer() {
 async function main() {
   const command = process.argv[2] || "start";
   if (command === "start" || command === "serve") return startServer();
+  if (command === "mcp") return runMcp();
   if (command === "demo") return runDemo();
   if (command === "benchmark") return runBenchmark();
   if (command === "install-embeddings") return installEmbeddings();
@@ -1557,6 +1627,7 @@ async function main() {
   console.log("");
   console.log("Usage:");
   console.log("  retaindb                 Start local memory server");
+  console.log("  retaindb mcp             Run the bundled MCP bridge against local memory");
   console.log("  retaindb demo            Seed and search demo memories");
   console.log("  retaindb benchmark       Run a small local recall/latency benchmark");
   console.log("  retaindb install-embeddings  Warm local transformer embeddings and model cache");

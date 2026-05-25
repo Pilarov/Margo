@@ -26,9 +26,15 @@ importers:
       '@hono/node-server':
         specifier: ^1.13.0
         version: 1.19.12(hono@4.12.10)
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.12.0
+        version: 1.29.0(zod@3.25.76)
       hono:
         specifier: ^4.7.0
         version: 4.12.10
+      zod:
+        specifier: ^3.25.76
+        version: 3.25.76
     optionalDependencies:
       '@xenova/transformers':
         specifier: ^2.17.2

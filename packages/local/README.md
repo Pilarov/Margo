@@ -15,7 +15,7 @@ In another terminal:
 ```bash
 npx -y @retaindb/local demo
 npx -y @retaindb/local connect all
-RETAINDB_BASE_URL=http://localhost:3111 npx -y @retaindb/mcp
+RETAINDB_BASE_URL=http://localhost:3111 npx -y @retaindb/local mcp
 ```
 
 ## Commands

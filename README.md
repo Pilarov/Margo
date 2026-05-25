@@ -60,7 +60,7 @@ npx -y @retaindb/local connect all
 Run the MCP bridge:
 
 ```bash
-RETAINDB_BASE_URL=http://localhost:3111 npx -y @retaindb/mcp
+RETAINDB_BASE_URL=http://localhost:3111 npx -y @retaindb/local mcp
 ```
 
 Local mode uses an atomic disk snapshot plus append-only journal under `~/.retaindb/`. It does not require Postgres, Redis, Kafka, Qdrant, Cloudflare, or API keys.
@@ -251,10 +251,10 @@ RetainDB also ships adapters for LangChain and LangGraph workflows, so memory ca
 
 ## MCP
 
-Start the MCP server against local RetainDB:
+Start the MCP server through the Local package:
 
 ```bash
-RETAINDB_BASE_URL=http://localhost:3111 npx -y @retaindb/mcp
+RETAINDB_BASE_URL=http://localhost:3111 npx -y @retaindb/local mcp
 ```
 
 Example MCP config:
@@ -264,7 +264,7 @@ Example MCP config:
   "mcpServers": {
     "retaindb": {
       "command": "npx",
-      "args": ["-y", "@retaindb/mcp"],
+      "args": ["-y", "@retaindb/local", "mcp"],
       "env": {
         "RETAINDB_BASE_URL": "http://localhost:3111",
         "RETAINDB_PROJECT": "my-agent"

@@ -19,5 +19,5 @@ Do not invent memories. If `memory_smart_search` is missing, tell the user to st
 
 ```bash
 npx -y @retaindb/local
-RETAINDB_BASE_URL=http://localhost:3111 npx -y @retaindb/mcp
+RETAINDB_BASE_URL=http://localhost:3111 npx -y @retaindb/local mcp
 ```
