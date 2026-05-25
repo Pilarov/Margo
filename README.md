@@ -134,6 +134,26 @@ RETAINDB_EMBEDDING_PROVIDER=local-transformers retaindb reembed
 
 If the local native embedding runtime is unavailable, RetainDB falls back to hash-vector embeddings so local memory keeps working.
 
+## Platform Features
+
+RetainDB Server and Cloud are the API/product infrastructure layer around the same memory model.
+
+Core platform features:
+
+- **Structured memory extraction** from conversations, sessions, and explicit writes
+- **Semantic search + BM25 + reranking** for context retrieval
+- **Memory graph** with relationships like `updates`, `contradicts`, `supports`, `extends`, and `derives`
+- **Temporal validity** with `validFrom` and `validUntil` so stale facts can be superseded instead of silently reused
+- **Versioned memories** for corrections and evolving user/project state
+- **Project and user scoping** for multi-agent and product use cases
+- **Connectors** for GitHub, docs sites, PDFs, Notion, Confluence, Slack, Discord, package docs, and more
+- **Framework adapters** for Vercel AI SDK, LangChain, and LangGraph
+- **MCP server** for agent clients that speak tools
+- **Self-hosted Postgres + pgvector path** for teams that want to own the stack
+- **Cloud track** for hosted auth, dashboards, SDK defaults, lifecycle email, usage controls, and managed reliability
+
+RetainDB Local optimizes for coding-agent memory on one machine. RetainDB Server and Cloud optimize for product memory across users, apps, teams, and integrations.
+
 ## SDK
 
 ```bash
@@ -199,6 +219,36 @@ await db.ingestSession({
 });
 ```
 
+### Vercel AI SDK
+
+```ts
+import { openai } from "@ai-sdk/openai";
+import { streamText } from "ai";
+import { RetainDBContext } from "@retaindb/sdk";
+
+const db = new RetainDBContext({
+  apiKey: process.env.RETAINDB_API_KEY,
+  baseUrl: process.env.RETAINDB_BASE_URL,
+  project: "my-agent",
+});
+
+const { context } = await db.query({
+  user_id,
+  query: userMessage,
+  include_memories: true,
+});
+
+const result = await streamText({
+  model: openai("gpt-4o"),
+  system: `You are a helpful assistant.\n\nRelevant memory:\n${context}`,
+  messages,
+});
+```
+
+### LangChain and LangGraph
+
+RetainDB also ships adapters for LangChain and LangGraph workflows, so memory can be retrieved before a chain/graph step and written back after the agent learns something useful.
+
 ## MCP
 
 Start the MCP server against local RetainDB:
@@ -252,6 +302,10 @@ If `RETAINDB_API_KEY` is set, protected deployments require `Authorization: Bear
 | `GET` | `/v1/memory/profile/:userId` | List profile memories |
 | `DELETE` | `/v1/memory/:id` | Delete or deactivate memory |
 | `GET` | `/v1/projects` | List projects |
+| `POST` | `/v1/projects/:id/sources` | Connect a knowledge source |
+| `GET` | `/v1/projects/:id/sources` | List project sources |
+| `POST` | `/v1/sources/:id/sync` | Trigger source sync |
+| `GET` | `/v1/sources/:id` | Inspect source status |
 
 Local-only runtime endpoints:
 
@@ -282,9 +336,24 @@ type MemoryType =
   | "correction"
   | "session_summary"
   | "project_state";
+
+type RelationType =
+  | "updates"
+  | "extends"
+  | "contradicts"
+  | "supports"
+  | "derives";
 ```
 
 Memories include confidence, importance, metadata, session and user scope, timestamps, and optional embeddings. Server and cloud deployments also support relationship and temporal metadata for richer memory graphs.
+
+Examples:
+
+- `preference`: "User prefers concise responses with concrete next steps."
+- `decision`: "The project standardizes on Postgres and pgvector for self-hosted search."
+- `constraint`: "Local mode must work without cloud API keys."
+- `correction`: "The old webhook path is deprecated; use `/v1/agent-events`."
+- `procedural`: "Before release, run typecheck, build, benchmark, and smoke replay."
 
 ## Connectors
 
@@ -330,6 +399,22 @@ The self-hosted server can index external knowledge sources into agent context:
 | Production teams, auth, hosted reliability, dashboard, billing, managed infra | RetainDB Cloud |
 
 RetainDB Cloud adds managed infrastructure, hosted auth, team workflows, production reliability, and cloud product features. RetainDB Local stays useful without cloud sync or an account.
+
+Cloud adds:
+
+- Hosted API keys, auth, and team access controls
+- Managed database, vector search, and scaling
+- Dashboard workflows for projects, keys, usage, and memory inspection
+- Lifecycle email and product update campaigns
+- Usage controls, alerts, and operational guardrails
+- Higher-level product integrations that do not belong in the local-only runtime
+
+Self-hosted notes:
+
+- The OSS server is single-tenant by default.
+- If `RETAINDB_API_KEY` is set, it acts as a shared deployment key.
+- Local development can run open on localhost.
+- Cloud-style organization isolation belongs in RetainDB Cloud.
 
 ## Packages
 
