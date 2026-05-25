@@ -6,7 +6,7 @@ type Target = "codex" | "claude-code" | "opencode" | "all";
 
 const target = ((process.argv.find((arg) => arg.startsWith("--target=")) || "").split("=")[1] || "all") as Target;
 const write = process.argv.includes("--write");
-const baseUrl = process.env.RETAINDB_BASE_URL || "http://localhost:3000";
+const baseUrl = process.env.RETAINDB_BASE_URL || "http://localhost:3111";
 const project = process.env.RETAINDB_PROJECT || "default";
 
 function mcpEnv() {

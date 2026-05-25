@@ -1,6 +1,6 @@
 import type { QueryParams } from "../index.js";
-import { RetainDBError as WhisperError } from "../errors.js";
-import { RetainDBClient as WhisperClient, type RetainDBClientConfig as WhisperClientConfig } from "../whisper.js";
+import { RetainDBError } from "../errors.js";
+import { RetainDBClient, type RetainDBClientConfig } from "../whisper.js";
 
 type AnyRecord = Record<string, unknown>;
 
@@ -10,9 +10,9 @@ type IdentityOverride = {
 };
 
 export interface WithRetainDBOptions
-  extends Partial<Omit<WhisperClientConfig, "apiKey">> {
+  extends Partial<Omit<RetainDBClientConfig, "apiKey">> {
   apiKey?: string;
-  client?: WhisperClient;
+  client?: RetainDBClient;
   project?: string;
   topK?: number;
   contextPrefix?: string;
@@ -36,8 +36,6 @@ export interface WithRetainDBOptions
   /** Static sessionId to scope memories within a conversation thread. */
   sessionId?: string;
 }
-/** @deprecated Use WithRetainDBOptions */
-export type WithWhisperOptions = WithRetainDBOptions;
 
 function warnDefault(message: string): void {
   if (typeof console !== "undefined" && typeof console.warn === "function") {
@@ -138,7 +136,7 @@ function injectContext(input: unknown, context: string, contextPrefix: string): 
   };
 }
 
-function buildClient(config: WithRetainDBOptions): WhisperClient {
+function buildClient(config: WithRetainDBOptions): RetainDBClient {
   if (config.client) return config.client;
 
   const env = (typeof process !== "undefined" ? process.env : {}) as Record<
@@ -152,7 +150,7 @@ function buildClient(config: WithRetainDBOptions): WhisperClient {
     env.USEWHISPER_API_KEY ||
     env.API_KEY;
   if (!apiKey) {
-    throw new WhisperError({
+    throw new RetainDBError({
       code: "INVALID_API_KEY",
       message:
         "Missing API key. Pass apiKey to withRetainDB(...) or set RETAINDB_API_KEY.",
@@ -160,7 +158,7 @@ function buildClient(config: WithRetainDBOptions): WhisperClient {
     });
   }
 
-  return new WhisperClient({
+  return new RetainDBClient({
     apiKey,
     baseUrl: config.baseUrl,
     project: config.project,
@@ -179,7 +177,7 @@ function buildClient(config: WithRetainDBOptions): WhisperClient {
 }
 
 async function getContextForInput(
-  client: WhisperClient,
+  client: RetainDBClient,
   input: unknown,
   config: WithRetainDBOptions,
 ): Promise<string> {
@@ -206,7 +204,7 @@ function extractMessages(input: unknown): AnyRecord[] {
 async function rememberTurn(
   input: unknown,
   config: WithRetainDBOptions,
-  client: WhisperClient,
+  client: RetainDBClient,
 ): Promise<void> {
   const identity = extractIdentity(input);
   const userId = identity.userId || config.userId;
@@ -232,17 +230,17 @@ async function rememberTurn(
   });
 }
 
-function asWhisperError(error: unknown): WhisperError {
-  if (error instanceof WhisperError) return error;
+function asRetainDBError(error: unknown): RetainDBError {
+  if (error instanceof RetainDBError) return error;
   if (error instanceof Error) {
-    return new WhisperError({
+    return new RetainDBError({
       code: "REQUEST_FAILED",
       message: error.message,
       retryable: false,
       cause: error,
     });
   }
-  return new WhisperError({
+  return new RetainDBError({
     code: "REQUEST_FAILED",
     message: "Unknown adapter error",
     retryable: false,
@@ -253,7 +251,7 @@ function asWhisperError(error: unknown): WhisperError {
 async function augmentInput(
   originalInput: unknown,
   config: WithRetainDBOptions,
-  client: WhisperClient,
+  client: RetainDBClient,
 ): Promise<unknown> {
   try {
     const context = await getContextForInput(client, originalInput, config);
@@ -264,7 +262,7 @@ async function augmentInput(
       config.contextPrefix || "Relevant context:",
     );
   } catch (error) {
-    const mapped = asWhisperError(error);
+    const mapped = asRetainDBError(error);
     if (config.bestEffort !== false) {
       (config.warn || warnDefault)(
         `[RetainDB SDK] withRetainDB fallback to raw model call: ${mapped.message}`,
@@ -279,7 +277,7 @@ function wrapMethod(
   model: AnyRecord,
   methodName: string,
   config: WithRetainDBOptions,
-  getClient: () => WhisperClient,
+  getClient: () => RetainDBClient,
 ): void {
   const original = model[methodName];
   if (typeof original !== "function") return;
@@ -329,7 +327,7 @@ export function withRetainDB<T extends Record<string, unknown> | ((...args: any[
   model: T,
   options: WithRetainDBOptions = {},
 ): T {
-  let client: WhisperClient | null = options.client || null;
+  let client: RetainDBClient | null = options.client || null;
   const getClient = () => {
     if (!client) client = buildClient(options);
     return client;
@@ -356,6 +354,3 @@ export function withRetainDB<T extends Record<string, unknown> | ((...args: any[
 
   return wrappedModel as T;
 }
-
-// Deprecated alias
-export { withRetainDB as withWhisper };

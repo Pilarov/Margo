@@ -34,7 +34,15 @@
     "typecheck": "tsc --noEmit",
     "prepublishOnly": "npm run build"
   },
-  "keywords": ["retaindb", "memory", "ai", "llm", "rag", "agents", "context"],
+  "keywords": [
+    "retaindb",
+    "memory",
+    "ai",
+    "llm",
+    "rag",
+    "agents",
+    "context"
+  ],
   "author": "RetainDB",
   "license": "Apache-2.0",
   "repository": {
@@ -42,11 +50,18 @@
     "url": "https://github.com/retaindb/retaindb"
   },
   "homepage": "https://retaindb.com",
-  "bugs": { "url": "https://github.com/retaindb/retaindb/issues" },
+  "bugs": {
+    "url": "https://github.com/retaindb/retaindb/issues"
+  },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "tsup": "^8.3.0",
     "typescript": "^5.7.0"
   },
-  "engines": { "node": ">=18.0.0" }
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "zod": "3.24.0"
+  }
 }

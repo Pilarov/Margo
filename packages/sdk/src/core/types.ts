@@ -10,6 +10,7 @@ export type OperationType =
   | "session"
   | "query"
   | "get"
+  | "upload"
   | "createSource";
 
 export interface TimeoutBudgets {

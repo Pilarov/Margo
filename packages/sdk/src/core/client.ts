@@ -31,6 +31,7 @@ const DEFAULT_RETRY_ATTEMPTS: Record<OperationType, number> = {
   session: 2,
   query: 3,
   get: 2,
+  upload: 1,
   createSource: 1,
 };
 

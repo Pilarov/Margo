@@ -508,7 +508,7 @@ export class RetainDB {
     return { getContext, searchMemory, listMemory, remember, forget, session, runTurn };
   }
 
-  /** Create an agent-scoped helper for local agent-memory workflows. */
+  /** Create an agent-scoped helper for local RetainDB workflows. */
   agent(agentId: string, baseTaskId?: string): AgentScope {
     if (!agentId || !agentId.trim()) throw new Error("RetainDB: agentId is required and cannot be empty");
     const memory = this.memory;

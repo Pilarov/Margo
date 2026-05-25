@@ -7,7 +7,7 @@ import { readdirSync, readFileSync, statSync } from "fs";
 import { join, relative, extname } from "path";
 import { userInfo } from "os";
 import { createHash } from "crypto";
-import { RetainDBContext } from "../sdk/index.js";
+import { RetainDBContext } from "../../sdk/src/index.js";
 import {
   buildMcpSearchPayload,
   buildPrimaryToolSuccess,
@@ -18,7 +18,7 @@ import {
 
 const API_KEY = process.env.RETAINDB_API_KEY || "";
 const DEFAULT_PROJECT = process.env.RETAINDB_PROJECT || "";
-const BASE_URL = process.env.RETAINDB_BASE_URL || "http://localhost:3000";
+const BASE_URL = process.env.RETAINDB_BASE_URL || "http://localhost:3111";
 
 // ─── Client bootstrap ──────────────────────────────────────────────────────
 
@@ -200,6 +200,94 @@ const workEventSchema = z.object({
 });
 
 // 1. CONTEXT — retrieve + auto-store in one call
+server.tool(
+  "memory_save",
+  "RetainDB Local alias for `remember`. Save an insight, decision, fact, bug, workflow, or preference.",
+  {
+    content: z.string(),
+    concepts: z.array(z.string()).optional(),
+    files: z.array(z.string()).optional(),
+    type: z.enum(["pattern", "preference", "architecture", "bug", "workflow", "fact", "decision", "constraint"]).optional(),
+    session_id: z.string().optional(),
+    agent_id: z.string().optional(),
+    task_id: z.string().optional(),
+  },
+  async ({ content, concepts, files, type, session_id, agent_id, task_id }) => {
+    try {
+      const project = await resolveProject();
+      const result = await client.addMemory({
+        project,
+        content,
+        memory_type: type === "bug" ? "correction" : type === "architecture" ? "project_state" : type === "pattern" ? "workflow" : type === "fact" ? "factual" : type || "factual",
+        user_id: defaultUserId(),
+        session_id: session_id?.trim(),
+        agent_id,
+        task_id,
+        metadata: { concepts: concepts || [], files: files || [], compatibility: "retaindb-local" },
+      });
+      return ok({ tool: "memory_save", stored: true, id: (result as any)?.memory_id || (result as any)?.id || null });
+    } catch (error: any) {
+      return err(error.message);
+    }
+  }
+);
+
+server.tool(
+  "memory_smart_search",
+  "RetainDB Local alias for `recall`. Search RetainDB Local memories.",
+  {
+    query: z.string(),
+    limit: z.number().optional().default(10),
+    session_id: z.string().optional(),
+    agent_id: z.string().optional(),
+    task_id: z.string().optional(),
+  },
+  async ({ query, limit, session_id, agent_id, task_id }) => {
+    try {
+      const project = await resolveProject();
+      const response = await client.searchMemories({
+        project,
+        query,
+        user_id: defaultUserId(),
+        session_id: session_id?.trim(),
+        agent_id,
+        task_id,
+        top_k: limit,
+        include_pending: true,
+        profile: "balanced",
+      });
+      const results = (response as any).results || (response as any).memories || [];
+      return ok({ tool: "memory_smart_search", query, results, count: Array.isArray(results) ? results.length : 0 });
+    } catch (error: any) {
+      return err(error.message);
+    }
+  }
+);
+
+server.tool(
+  "memory_sessions",
+  "RetainDB Local session memory listing. Pass a session_id for one session, or omit it to get recent user memories.",
+  {
+    session_id: z.string().optional(),
+    limit: z.number().optional().default(20),
+  },
+  async ({ session_id, limit }) => {
+    try {
+      const project = await resolveProject();
+      if (session_id?.trim()) {
+        const response = await client.getSessionMemories({ project, session_id: session_id.trim(), include_pending: true, limit });
+        const memories = (response as any).memories || [];
+        return ok({ tool: "memory_sessions", session_id, memories, count: (response as any).count ?? memories.length });
+      }
+      const response = await client.getUserProfile({ project, user_id: defaultUserId(), include_pending: true });
+      const memories = ((response as any).memories || []).slice(0, limit ?? 20);
+      return ok({ tool: "memory_sessions", memories, count: memories.length });
+    } catch (error: any) {
+      return err(error.message);
+    }
+  }
+);
+
 server.tool(
   "context",
   "Call this at the start of every task. Retrieves memories from past sessions, indexed source knowledge, and local codebase matches — all at once. " +

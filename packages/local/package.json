@@ -1,0 +1,62 @@
+{
+  "name": "@retaindb/local",
+  "version": "0.1.0",
+  "description": "RetainDB Local - one-process persistent memory for coding agents",
+  "type": "module",
+  "bin": {
+    "retaindb": "./dist/cli.js",
+    "retaindb-local": "./dist/cli.js"
+  },
+  "main": "dist/cli.js",
+  "files": [
+    "dist/",
+    "plugin/",
+    "README.md",
+    "package.json"
+  ],
+  "scripts": {
+    "build": "tsup src/cli.ts --format esm --out-dir dist",
+    "dev": "tsx src/cli.ts",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "retaindb",
+    "agent-runtime-memory",
+    "mcp",
+    "codex",
+    "claude-code",
+    "opencode",
+    "local-first"
+  ],
+  "author": "RetainDB",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/retaindb/retaindb"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.13.0",
+    "hono": "^4.7.0"
+  },
+  "optionalDependencies": {
+    "@xenova/transformers": "^2.17.2"
+  },
+  "peerDependencies": {
+    "@xenova/transformers": ">=2.17.0"
+  },
+  "peerDependenciesMeta": {
+    "@xenova/transformers": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsup": "^8.3.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

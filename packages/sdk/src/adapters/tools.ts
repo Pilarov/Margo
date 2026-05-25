@@ -1,24 +1,20 @@
 import { z } from "zod";
-import { RetainDBError, RetainDBError as WhisperError } from "../errors.js";
-import { RetainDBClient, type RetainDBClientConfig as WhisperClientConfig } from "../whisper.js";
+import { RetainDBError } from "../errors.js";
+import { RetainDBClient, type RetainDBClientConfig } from "../whisper.js";
 
 export interface RetainDBToolsOptions
-  extends Partial<Omit<WhisperClientConfig, "apiKey">> {
+  extends Partial<Omit<RetainDBClientConfig, "apiKey">> {
   apiKey?: string;
   client?: RetainDBClient;
   project?: string;
   searchTopK?: number;
 }
-/** @deprecated Use RetainDBToolsOptions */
-export type WhisperToolsOptions = RetainDBToolsOptions;
 
 export interface RetainDBToolDefinition<TInput, TResult> {
   description: string;
   inputSchema: z.ZodType<TInput>;
   execute: (input: TInput) => Promise<TResult>;
 }
-/** @deprecated Use RetainDBToolDefinition */
-export type WhisperToolDefinition<TInput, TResult> = RetainDBToolDefinition<TInput, TResult>;
 
 type SearchInput = {
   q: string;
@@ -199,6 +195,3 @@ export function retaindbTools(config: RetainDBToolsOptions = {}) {
     retaindb_preflight,
   };
 }
-
-// Deprecated alias
-export { retaindbTools as whisperTools };

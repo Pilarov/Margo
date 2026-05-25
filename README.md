@@ -12,11 +12,22 @@
   <img src="https://img.shields.io/badge/postgres-%2B%20pgvector-informational" />
 </p>
 
+## RetainDB Local
+
+Persistent memory for coding agents. Runs on your machine.
+
+RetainDB Local is the local-first product track for Codex, Claude Code, OpenCode, and any MCP client. It stays useful without a cloud account: the local runtime is one Node process, stores memories on disk under `~/.retaindb/local-store.json`, exposes a REST API on `:3111`, and works with the MCP bridge without Postgres, Redis, Kafka, Qdrant, or Cloudflare.
+
 ---
 
-RetainDB is a self-hostable memory layer for AI agents. Give your agents persistent, structured memory that survives across sessions, users, and time — with one `docker compose up`.
+RetainDB is a self-hostable memory layer for AI agents. Give your agents persistent, structured memory that survives across sessions, users, and time.
 
 ## What it does
+
+- **Agent Memory Bridge** - MCP tools for `context`, `remember`, `recall`, `handoff`, `session_history`, and `forget`
+- **Auto-capture ready** - Codex, Claude Code, and OpenCode config snippets for session/tool/work-event capture
+- **Zero external DB local mode** - `@retaindb/local` runs as one process with a disk JSON store for coding-agent memory
+- **Demo in one command** - seed a fake coding session and prove recall with `retaindb demo`
 
 - **Stores memories** extracted from conversations via LLM — typed, versioned, confidence-scored
 - **Retrieves context** in one call — semantic search + BM25 + rerank, packed into a context string ready for your LLM
@@ -27,7 +38,37 @@ RetainDB is a self-hostable memory layer for AI agents. Give your agents persist
 
 ## Quickstart
 
-### Option 1 — Docker (easiest)
+### Option 1 - RetainDB Local (easiest)
+
+```bash
+npx -y @retaindb/local
+# Server ready at http://localhost:3111
+```
+
+No config needed. No API keys required for local use.
+
+Seed a real recall demo:
+
+```bash
+npx -y @retaindb/local demo
+```
+
+Wire Codex, Claude Code, and OpenCode to the local memory bridge:
+
+```bash
+npx -y @retaindb/local connect all
+# snippets are written to .retaindb/agent-bridge/
+```
+
+Run the MCP server in local no-key mode:
+
+```bash
+RETAINDB_BASE_URL=http://localhost:3111 npx -y @retaindb/mcp
+```
+
+Proof loop: teach the agent a project decision in session 1 with `remember` or `agent_event`, then call `context` or `recall` in session 2 with the same project/task. The remembered decision should come back without re-explaining.
+
+### Option 2 - Docker + Postgres server
 
 ```bash
 git clone https://github.com/retaindb/retaindb
@@ -36,17 +77,11 @@ docker compose up
 # Server ready at http://localhost:3000
 ```
 
-No config needed. No API keys required for local use.
-
-To enable OpenAI embeddings (optional — falls back to a local model otherwise):
-
-```bash
-OPENAI_API_KEY=sk-... docker compose up
-```
+Use this path when you want the full OSS API server with Postgres/pgvector.
 
 ---
 
-### Option 2 — Without Docker (Node 18+ + Postgres)
+### Option 3 - Without Docker (Node 18+ + Postgres)
 
 If you don't have Docker, you can run the server directly with Node.js. You'll need Postgres with the `pgvector` extension installed.
 
@@ -169,7 +204,7 @@ const result = await streamText({
 ## MCP (Claude Desktop)
 
 ```bash
-npx @retaindb/mcp
+RETAINDB_BASE_URL=http://localhost:3111 npx -y @retaindb/mcp
 ```
 
 Add to `claude_desktop_config.json`:
@@ -179,9 +214,9 @@ Add to `claude_desktop_config.json`:
   "mcpServers": {
     "retaindb": {
       "command": "npx",
-      "args": ["@retaindb/mcp"],
+      "args": ["-y", "@retaindb/mcp"],
       "env": {
-        "RETAINDB_BASE_URL": "http://localhost:3000"
+        "RETAINDB_BASE_URL": "http://localhost:3111"
       }
     }
   }

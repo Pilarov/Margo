@@ -36,6 +36,7 @@ export interface QueryParams {
   bm25_weight?: number;
   rerank?: boolean;
   include_memories?: boolean;
+  include_pending?: boolean;
   user_id?: string;
   session_id?: string;
   agent_id?: string;

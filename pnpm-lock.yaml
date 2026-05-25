@@ -21,6 +21,32 @@ importers:
         specifier: ^5.7.0
         version: 5.9.3
 
+  packages/local:
+    dependencies:
+      '@hono/node-server':
+        specifier: ^1.13.0
+        version: 1.19.12(hono@4.12.10)
+      hono:
+        specifier: ^4.7.0
+        version: 4.12.10
+    optionalDependencies:
+      '@xenova/transformers':
+        specifier: ^2.17.2
+        version: 2.17.2
+    devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.19.15
+      tsup:
+        specifier: ^8.3.0
+        version: 8.5.1(jiti@2.6.1)(tsx@4.21.0)(typescript@5.9.3)
+      tsx:
+        specifier: ^4.19.0
+        version: 4.21.0
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+
   packages/mcp:
     dependencies:
       '@modelcontextprotocol/sdk':
@@ -44,6 +70,10 @@ importers:
         version: 5.9.3
 
   packages/sdk:
+    dependencies:
+      zod:
+        specifier: 3.24.0
+        version: 3.24.0
     devDependencies:
       '@types/node':
         specifier: ^22.0.0
@@ -1742,6 +1772,9 @@ packages:
     peerDependencies:
       zod: ^3.25.28 || ^4
 
+  zod@3.24.0:
+    resolution: {integrity: sha512-Hz+wiY8yD0VLA2k/+nsg2Abez674dDGTai33SwNvMPuf9uIrBC9eFgIMQxBBbHFxVXi8W+5nX9DcAh9YNSQm/w==}
+
   zod@3.25.76:
     resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
 
@@ -3353,5 +3386,7 @@ snapshots:
   zod-to-json-schema@3.25.2(zod@3.25.76):
     dependencies:
       zod: 3.25.76
+
+  zod@3.24.0: {}
 
   zod@3.25.76: {}
