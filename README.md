@@ -498,4 +498,4 @@ PRs are welcome. For larger changes, open an issue first with the problem, propo
 - `packages/mcp`: Apache 2.0
 - `packages/server`: [Business Source License 1.1](./LICENSE-BSL)
 
-Self-hosting is free. Building a hosted service on top of the server requires a commercial license. Contact `hi@retaindb.com`.
+Self-hosting is free. Building a hosted service on top of the server requires a commercial license. Contact `alex@retaindb.com`.
