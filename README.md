@@ -263,7 +263,7 @@ Embedding Server в Docker-режиме не поднимается автома
 | Режим | Что используется |
 |---|---|
 | `cross-encoder` | BGE-reranker-large (локально) |
-| `llm` | GPT-4o-mini / DeepSeek |
+| `llm` | GPT-4o-mini, DeepSeek и др |
 | `balanced` | cross-encoder + LLM-fallback (если confidence < 0.85) |
 | `remote` | Любой HTTP-сервис |
 
