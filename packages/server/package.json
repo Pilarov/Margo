@@ -10,6 +10,8 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsup src/index.ts --format esm --out-dir dist --dts",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
@@ -39,7 +41,8 @@
     "prisma": "^6.0.0",
     "tsup": "^8.3.0",
     "tsx": "^4.19.0",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "vitest": "^3.1.0"
   },
   "engines": {
     "node": ">=18.0.0"

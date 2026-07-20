@@ -12,6 +12,7 @@ import { ensureConnectorsRegistered } from "./connectors/registry.js";
 import { getConnector, listConnectorDescriptors, listConnectorTypes } from "./connectors/types.js";
 import type { SourceType } from "./sources/types.js";
 import { buildCompanyBrain, askBrain, feedAgent, memoryToCitation, isFromSource } from "./brain/company_brain.js";
+import { embedding as embCfg } from "./config.js";
 
 type Message = { role: string; content: string; timestamp?: string };
 type WorkEvent = {
@@ -100,7 +101,7 @@ const RETAINDB_HOME = resolve(process.env.RETAINDB_HOME || join(homedir(), ".ret
 const STORE_PATH = resolve(process.env.RETAINDB_STORE || join(RETAINDB_HOME, "local-store.json"));
 const JOURNAL_PATH = `${STORE_PATH}.journal.jsonl`;
 const BENCHMARK_DIR = join(RETAINDB_HOME, "benchmarks");
-const EMBEDDING_PROVIDER = process.env.RETAINDB_EMBEDDING_PROVIDER || "hash";
+const EMBEDDING_PROVIDER = embCfg.provider;
 const SKIP_DIRS = new Set([".git", "node_modules", "dist", "build", ".next", "coverage", ".turbo", ".cache", ".vercel", ".wrangler"]);
 const CODE_EXTENSIONS = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".py", ".rs", ".go", ".java", ".cs", ".rb", ".php", ".md", ".mdx", ".json", ".toml", ".yaml", ".yml", ".css", ".scss", ".html", ".sql"]);
 let transformerPipeline: Promise<any> | null = null;
@@ -410,7 +411,7 @@ async function transformerEmbedding(text: string) {
     transformerPipeline = (async () => {
       const dynamicImport = new Function("specifier", "return import(specifier)") as (specifier: string) => Promise<any>;
       const transformers = await dynamicImport("@xenova/transformers");
-      return transformers.pipeline("feature-extraction", process.env.RETAINDB_EMBEDDING_MODEL || "Xenova/all-MiniLM-L6-v2");
+      return transformers.pipeline("feature-extraction", embCfg.model);
     })();
   }
   const extractor = await transformerPipeline;
@@ -2771,7 +2772,7 @@ async function installEmbeddings() {
     const result = {
       ok: true,
       provider: "local-transformers",
-      model: process.env.RETAINDB_EMBEDDING_MODEL || "Xenova/all-MiniLM-L6-v2",
+      model: embCfg.model,
       dimensions: vector.length,
       warmup_ms: Number((performance.now() - started).toFixed(2)),
       next: "Set RETAINDB_EMBEDDING_PROVIDER=local-transformers and run `retaindb reembed`.",

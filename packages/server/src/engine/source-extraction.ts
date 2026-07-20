@@ -14,6 +14,7 @@
 import OpenAI from "openai";
 import { prisma } from "../db/index.js"; // used for document queries
 import { ingestDocument } from "./ingest.js";
+import { embedding as cfg } from "../config.js";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -218,7 +219,7 @@ Respond with JSON only:
       model: "gpt-4o-mini",
       messages: [{ role: "user", content: prompt }],
       temperature: 0,
-      max_tokens: 800,
+      max_tokens: cfg.extractionMaxTokens,
       response_format: { type: "json_object" },
     });
 

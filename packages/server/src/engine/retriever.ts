@@ -9,6 +9,7 @@ import { getFromCache, setInCache } from "./cache.js";
 import { recordRetrievalWorkloadSample, recordStageBreakdown } from "./latency-tracing.js";
 import { rerankWithInferenceService } from "./inference-client.js";
 import { selectOracleCandidateChunkIds } from "./oracle-select.js";
+import { rerank as rCfg } from "../config.js";
 
 let openaiClient: OpenAI | null = null;
 
@@ -23,13 +24,13 @@ function getOpenAIClient(): OpenAI {
 }
 
 // Reranking mode: 'balanced' (cross-encoder + strict LLM guard), 'cross-encoder', 'llm'
-const RERANK_MODE = process.env.RERANK_MODE || "balanced";
-const RERANK_PROVIDER = process.env.RERANK_PROVIDER || "local";
-const REMOTE_INFERENCE_REQUIRED = /^true$/i.test(process.env.REMOTE_INFERENCE_REQUIRED || "false");
-const LLM_RERANK_ENABLED = /^true$/i.test(process.env.LLM_RERANK_ENABLED || "false");
-const RERANK_BUDGET_MS = parseInt(process.env.RERANK_BUDGET_MS || "90", 10);
-const LLM_RERANK_MIN_BUDGET_MS = parseInt(process.env.LLM_RERANK_MIN_BUDGET_MS || "75", 10);
-const LLM_RERANK_MAX_CANDIDATES = parseInt(process.env.LLM_RERANK_MAX_CANDIDATES || "5", 10);
+const RERANK_MODE = rCfg.mode;
+const RERANK_PROVIDER = rCfg.provider;
+const REMOTE_INFERENCE_REQUIRED = rCfg.remoteRequired;
+const LLM_RERANK_ENABLED = rCfg.llmEnabled;
+const RERANK_BUDGET_MS = rCfg.budgetMs;
+const LLM_RERANK_MIN_BUDGET_MS = rCfg.llmMinBudgetMs;
+const LLM_RERANK_MAX_CANDIDATES = rCfg.llmMaxCandidates;
 const STAGE_TIMING_LOG_ENABLED = /^true$/i.test(process.env.RETRIEVAL_STAGE_TIMING_LOG || "true");
 const RETRIEVAL_PRECISION_V1_DEFAULT = /^true$/i.test(process.env.RETRIEVAL_PRECISION_V1_DEFAULT || "false");
 const PARENT_EXCERPT_MAX_CHARS = 900;
@@ -37,7 +38,7 @@ const PARENT_EXCERPT_MAX_CHARS = 900;
 const RETRIEVAL_PROFILE = "balanced";
 const MAX_RESULTS_PER_SEARCH = parseInt(process.env.MAX_RESULTS_PER_SEARCH || "24", 10);
 const MAX_PRE_DEDUPE_RESULTS = parseInt(process.env.MAX_PRE_DEDUPE_RESULTS || "96", 10);
-const MAX_RERANK_CANDIDATES = parseInt(process.env.MAX_RERANK_CANDIDATES || "20", 10);
+const MAX_RERANK_CANDIDATES = rCfg.maxCandidates;
 
 export const RETRIEVAL_PROFILE_VALUES = ["legacy", "precision_v1"] as const;
 export type RetrievalProfile = typeof RETRIEVAL_PROFILE_VALUES[number];
@@ -775,7 +776,7 @@ async function expandQueryAndSearch(
     const client = getOpenAIClient();
     const resp = await client.chat.completions.create({
       model: "gpt-4o-mini",
-      max_tokens: 120,
+      max_tokens: rCfg.llmMaxTokens,
       temperature: 0.3,
       messages: [{
         role: "user",
@@ -1589,7 +1590,7 @@ ${candidates.map((r, i) => `[${i}] ${r.content.slice(0, 300)}`).join("\n\n")}`;
       model: "gpt-4o-mini",
       messages: [{ role: "user", content: prompt }],
       temperature: 0,
-      max_tokens: 200,
+      max_tokens: rCfg.llmMaxTokens,
     });
 
     const text = res.choices[0]?.message?.content?.trim() || "";

@@ -1,3 +1,5 @@
+import { embedding as eCfg, rerank as rCfg } from "../config.js";
+
 type RemoteRerankRow = {
   index?: number;
   candidate_index?: number;
@@ -16,27 +18,27 @@ function normalizeUrl(url?: string): string {
 function resolveBaseUrl(route: InferenceRoute): string {
   if (route === "embedding") {
     return normalizeUrl(
-      process.env.EMBEDDING_INFERENCE_BASE_URL ||
-      process.env.EMBEDDING_BASE_URL ||
-      process.env.INFERENCE_BASE_URL ||
-      process.env.INFERENCE_API_URL
+      eCfg.embeddingInferenceBaseUrl ||
+      eCfg.embeddingBaseUrl ||
+      eCfg.inferenceBaseUrl ||
+      eCfg.inferenceApiUrl
     );
   }
   return normalizeUrl(
-    process.env.RERANK_INFERENCE_BASE_URL ||
-    process.env.RERANK_BASE_URL ||
-    process.env.INFERENCE_BASE_URL ||
-    process.env.INFERENCE_API_URL
+    rCfg.rerankInferenceBaseUrl ||
+    rCfg.rerankBaseUrl ||
+    rCfg.inferenceBaseUrl ||
+    rCfg.inferenceApiUrl
   );
 }
 
-const INFERENCE_TIMEOUT_MS = parseInt(process.env.INFERENCE_TIMEOUT_MS || "2500", 10);
+const INFERENCE_TIMEOUT_MS = eCfg.inferenceTimeoutMs;
 
 function buildHeaders(): Record<string, string> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
-  const apiKey = process.env.INFERENCE_API_KEY || process.env.RETAINDB_INFERENCE_KEY;
+  const apiKey = eCfg.inferenceApiKey;
   if (apiKey) {
     headers.Authorization = `Bearer ${apiKey}`;
   }

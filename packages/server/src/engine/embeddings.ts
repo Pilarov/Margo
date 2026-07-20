@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import { embedLocal, embedSingleLocal } from "./embeddings-local.js";
 import { embedWithInferenceService } from "./inference-client.js";
+import { embedding as cfg } from "../config.js";
 
 let openaiClient: OpenAI | null = null;
 
@@ -14,19 +15,19 @@ function getOpenAIClient(): OpenAI {
   return openaiClient;
 }
 
-// Configuration:
-//   'openai'  — OpenAI text-embedding-3-small (1024-dim) [default]
+// Configuration modes:
+//   'openai'  — OpenAI text-embedding-3-small (1024-dim)
 //   'gemini'  — Google text-embedding-004 (768-dim, no in-process model)
 //   'local'   — BGE-large in-process (free, but uses RAM/CPU per instance)
 //   'hybrid'  — local for small batches, OpenAI for large batches
-//   'remote'  — custom inference service
-const EMBEDDING_MODE = process.env.EMBEDDING_MODE || 'remote';
+//   'remote'  — custom inference service [default]
+const EMBEDDING_MODE = cfg.mode;
 const USE_LOCAL_EMBEDDINGS = EMBEDDING_MODE === 'local' || EMBEDDING_MODE === 'hybrid';
 const USE_REMOTE_EMBEDDINGS = EMBEDDING_MODE === 'remote' || EMBEDDING_MODE === 'workers';
-const REMOTE_INFERENCE_REQUIRED = /^true$/i.test(process.env.REMOTE_INFERENCE_REQUIRED || "false");
+const REMOTE_INFERENCE_REQUIRED = cfg.remoteRequired;
 
 // Batches larger than this always use OpenAI/Gemini regardless of EMBEDDING_MODE.
-const LARGE_BATCH_THRESHOLD = Number(process.env.LARGE_BATCH_THRESHOLD ?? 20);
+const LARGE_BATCH_THRESHOLD = cfg.largeBatchThreshold;
 
 // ── OpenAI ──────────────────────────────────────────────────────────────────
 async function embedWithOpenAI(texts: string[]): Promise<number[][]> {
@@ -44,7 +45,7 @@ async function embedWithOpenAI(texts: string[]): Promise<number[][]> {
 // Uses Google's text-embedding-004 via REST (no SDK dependency).
 // Dimension: 768 (set outputDimensionality to override, max 768).
 // NOTE: switching to gemini requires re-indexing existing vectors (768 vs 1024 dims).
-const GEMINI_DIMENSIONS = Number(process.env.GEMINI_EMBEDDING_DIMENSIONS ?? 768);
+const GEMINI_DIMENSIONS = cfg.geminiDimensions;
 
 async function embedWithGemini(texts: string[]): Promise<number[][]> {
   const apiKey = process.env.GOOGLE_API_KEY;

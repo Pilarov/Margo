@@ -15,13 +15,15 @@
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "typecheck:server": "pnpm --filter @retaindb/server typecheck",
+    "test": "turbo run test",
     "clean": "turbo run clean"
   },
   "devDependencies": {
     "turbo": "^2.3.0",
     "typescript": "^5.7.0",
     "@types/node": "^22.0.0",
-    "tsup": "^8.3.0"
+    "tsup": "^8.3.0",
+    "vitest": "^3.1.0"
   },
   "engines": {
     "node": ">=18.0.0",

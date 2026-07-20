@@ -4,6 +4,7 @@ import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { serve } from "@hono/node-server";
 import { embedLocal } from "./engine/embeddings-local.js";
+import { embedding as cfg } from "./config.js";
 
 type EmbeddingRequest = {
   inputs?: unknown;
@@ -12,10 +13,10 @@ type EmbeddingRequest = {
 
 const app = new Hono();
 const PORT = Number(process.env.PORT || 8080);
-const EMBEDDING_MODEL = process.env.EMBEDDING_MODEL || "Xenova/bge-large-en-v1.5";
-const INFERENCE_API_KEY = (process.env.INFERENCE_API_KEY || "").trim();
-const MAX_BATCH_SIZE = Math.max(1, Number(process.env.EMBEDDING_MAX_BATCH_SIZE || 64));
-const MAX_CONCURRENCY = Math.max(1, Number(process.env.EMBEDDING_MAX_CONCURRENCY || 2));
+const EMBEDDING_MODEL = cfg.model;
+const INFERENCE_API_KEY = (cfg.inferenceApiKey || "").trim();
+const MAX_BATCH_SIZE = cfg.maxBatchSize;
+const MAX_CONCURRENCY = cfg.maxConcurrency;
 
 let activeWorkers = 0;
 const waitQueue: Array<() => void> = [];

@@ -14,6 +14,7 @@ import crypto from "crypto";
 import type { AuthContext } from "../middleware/auth.js";
 import { rateLimitMiddleware, RateLimits } from "../middleware/rate-limit.js";
 import { embed, embedSingle } from "../engine/embeddings.js";
+import { embedding as cfg } from "../config.js";
 
 type Variables = { auth: AuthContext };
 
@@ -22,7 +23,7 @@ export const searchRoutes = new Hono<{ Variables: Variables }>();
 // ── Persistent Embedding Cache ────────────────────────────────
 // Survives server restarts. Each file is only ever embedded once.
 // Location: EMBEDDING_CACHE_FILE env var, or .embedding-cache.json next to the process.
-const EMBEDDING_CACHE_FILE = process.env.EMBEDDING_CACHE_FILE ?? ".embedding-cache.json";
+const EMBEDDING_CACHE_FILE = cfg.cacheFile;
 const DOC_CACHE_MAX = 10_000;
 
 // In-memory layer (hash → vector)
