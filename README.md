@@ -9,7 +9,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/local-first-success" alt="Local first" />
   <img src="https://img.shields.io/badge/license-Apache%202.0%20%2F%20BSL%201.1-blue" alt="License" />
-  <img src="https://img.shields.io/badge/tests-302%20passed-green" alt="Tests" />
+  <img src="https://img.shields.io/badge/tests-346%20passed-green" alt="Tests" />
 </p>
 
 ---
@@ -20,11 +20,12 @@
 |---|---|
 | Централизованный конфиг (`config.ts`) | ✓ |
 | `retaindb.config.json` — альтернатива env-переменным | ✓ |
+| Мультипровайдер LLM: per-task модель + ключ + URL (18 задач) | ✓ |
 | Подключаемые эмбеддеры: OpenAI, Gemini, BGE-local, remote HTTP | ✓ |
 | Подключаемый реранкинг: cross-encoder, LLM, balanced, remote HTTP | ✓ |
 | Настройка `max_tokens` для reasoning-моделей (DeepSeek) | ✓ |
-| 302 unit-теста в 14 файлах (Vitest) | ✓ |
-| E2E-тест: Embed → Search → Extract → Rerank | ✓ |
+| 346 unit-тестов в 17 файлах (Vitest) | ✓ |
+| E2E-тесты: мультипровайдер + полный пайплайн | ✓ |
 | Подробная документация: `CONFIGURATION.md`, `TESTING.md` | ✓ |
 
 ---
@@ -155,7 +156,9 @@ cp .env.example packages/server/.env
 DATABASE_URL=postgresql://retaindb:retaindb@localhost:5432/retaindb
 OPENAI_API_KEY=sk-...                        # Ключ DeepSeek
 OPENAI_BASE_URL=https://api.deepseek.com/v1  # DeepSeek endpoint
-LLM_EXTRACTION_MAX_TOKENS=1500               # Больше для reasoning-моделей
+LLM_EXTRACTION_MODEL=deepseek-v4-flash      # модель для extraction
+LLM_RERANK_MODEL=deepseek-v4-flash          # модель для rerank
+LLM_EXTRACTION_MAX_TOKENS=1500              # больше для reasoning-моделей
 LLM_RERANK_MAX_TOKENS=500
 ```
 
@@ -228,23 +231,32 @@ Embedding Server в Docker-режиме не поднимается автома
 | 2 | `retaindb.config.json` |
 | 3 | Значения по умолчанию |
 
-Пример `retaindb.config.json`:
+Пример `retaindb.config.json` (мультипровайдер):
 
 ```json
 {
   "embedding": {
     "mode": "remote",
-    "embeddingInferenceBaseUrl": "http://localhost:8080",
-    "extractionMaxTokens": 1500
+    "embeddingInferenceBaseUrl": "http://localhost:8080"
   },
   "rerank": {
-    "mode": "llm",
-    "llmMaxTokens": 500
+    "mode": "llm"
+  },
+  "llm": {
+    "default": {
+      "apiKey": "sk-openai...",
+      "baseUrl": "https://api.openai.com/v1"
+    },
+    "tasks": {
+      "extraction": { "model": "deepseek-v4-flash", "apiKey": "sk-deepseek...", "baseUrl": "https://api.deepseek.com/v1" },
+      "rerank":     { "model": "deepseek-v4-flash", "apiKey": "sk-deepseek...", "baseUrl": "https://api.deepseek.com/v1" },
+      "dialectic":  { "model": "gpt-4o" }
+    }
   }
 }
 ```
 
-Подробнее: **[CONFIGURATION.md](./CONFIGURATION.md)** — все 50+ переменных, 6 режимов эмбеддинга, 4 режима реранкинга, DeepSeek-особенности.
+Подробнее: **[CONFIGURATION.md](./CONFIGURATION.md)** — 18 LLM-задач с per-task моделью/ключом/URL, 6 режимов эмбеддинга, 4 режима реранкинга, DeepSeek-особенности.
 
 ---
 
@@ -273,8 +285,8 @@ Embedding Server в Docker-режиме не поднимается автома
 
 ```bash
 pnpm install
-pnpm run test                 # 302 теста, 3 пакета
-pnpm --filter @retaindb/server test   # 191 тест
+pnpm run test                 # 346 тестов, 3 пакета
+pnpm --filter @retaindb/server test   # 235 тестов
 pnpm --filter @retaindb/local test    # 80 тестов
 pnpm --filter @retaindb/sdk test      # 31 тест
 ```
@@ -284,7 +296,13 @@ pnpm --filter @retaindb/sdk test      # 31 тест
 ## E2E
 
 ```bash
-# Требует embedding-server на :8080
+# Мультипровайдерный конфиг + реальный LLM-вызов
+cd packages/server
+OPENAI_API_KEY=sk-... OPENAI_BASE_URL=https://api.deepseek.com/v1 \
+LLM_EXTRACTION_MODEL=deepseek-v4-flash \
+node --import tsx/esm src/e2e-llm-provider.ts
+
+# Полный пайплайн (требует embedding-server на :8080)
 node e2e-test.mjs
 ```
 
