@@ -4,6 +4,7 @@
  */
 
 import OpenAI from "openai";
+import { getLLMClient } from "./llm-client.js";
 
 export type ModelTier = "haiku" | "sonnet" | "opus";
 export type TaskType =
@@ -136,9 +137,7 @@ export async function smartLLMCall(params: {
 
   const modelConfig = getOptimalModel(taskType, { forceModel });
 
-  const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY || "",
-  });
+  const openai = getLLMClient();
 
   const messages: any[] = [{ role: "user", content: prompt }];
 

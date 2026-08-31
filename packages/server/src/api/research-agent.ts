@@ -15,8 +15,8 @@ import { getUserMemory, updateUserMemory, rememberFact, saveResearchSession, get
 import { browseWeb, deepResearch } from "../engine/browser-agent.js";
 import type { AuthContext } from "../middleware/auth.js";
 import { resolveProjectReference, getEffectiveOrgId } from "./helpers.js";
-
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || "" });
+import { getLLMClient } from "../engine/llm-client.js";
+import { llm as llmCfg } from "../config.js";
 
 type Variables = { auth: AuthContext };
 
@@ -25,7 +25,7 @@ export const researchAgentRoutes = new Hono<{ Variables: Variables }>();
 const researchSchema = z.object({
   project: z.string().optional(), // specific project ID, "all" for multi-project, or omit
   query: z.string().min(1).max(2000),
-  model: z.string().optional().default("gpt-4o"),
+  model: z.string().optional().default(llmCfg.researchAgent.model),
   maxSteps: z.number().optional().default(8),
   enableWebBrowse: z.boolean().optional().default(true),
   mode: z.enum(["research", "onboarding", "contradiction"]).optional().default("research"),
@@ -587,7 +587,7 @@ At the end of your answer, add a ## References section listing each [^1], [^2]..
             message: stepCount === 1 ? "Analyzing your question and planning web research..." : "Continuing research...",
           });
 
-          const completion = await openai.chat.completions.create({
+          const completion = await getLLMClient(llmCfg.researchAgent).chat.completions.create({
             model: body.model,
             messages,
             tools: AGENT_TOOLS,
@@ -672,7 +672,7 @@ At the end of your answer, add a ## References section listing each [^1], [^2]..
         if (stepCount >= maxSteps) {
           await send("thinking", { step: stepCount, message: "Synthesizing findings..." });
 
-          const finalCompletion = await openai.chat.completions.create({
+          const finalCompletion = await getLLMClient(llmCfg.researchAgent).chat.completions.create({
             model: body.model,
             messages: [
               ...messages,
@@ -827,7 +827,7 @@ researchAgentRoutes.get("/v1/agent/insights", async (c) => {
 const browseSchema = z.object({
   query: z.string().min(1).max(2000),
   url: z.string().optional(),
-  model: z.string().optional().default("gpt-4o"),
+  model: z.string().optional().default(llmCfg.researchAgent.model),
   maxSteps: z.number().optional().default(6),
   mode: z.string().optional().default("research"),
   schema: z.string().optional(), // comma-separated field names for structured extraction
@@ -1023,7 +1023,7 @@ Research each competitor's website, pricing page, and feature docs. Be specific 
           // Force tool use for the first 4 steps
           const forceTools = toolCallsMade < 4;
 
-          const completion = await openai.chat.completions.create({
+          const completion = await getLLMClient(llmCfg.researchAgent).chat.completions.create({
             model: body.model,
             messages,
             tools: BROWSE_TOOLS,

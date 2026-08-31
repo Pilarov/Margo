@@ -30,6 +30,7 @@ function str(value: string | undefined, fallback: string): string {
 const json = readJsonConfig();
 const jEmbed = (json.embedding ?? {}) as Record<string, any>;
 const jRerank = (json.rerank ?? {}) as Record<string, any>;
+const jLlm = (json.llm ?? {}) as Record<string, any>;
 
 // ── Embedding config ────────────────────────────────────────────────────────
 
@@ -103,4 +104,77 @@ export const rerank: RerankConfig = {
   llmMaxCandidates: num(process.env.LLM_RERANK_MAX_CANDIDATES, jRerank.llmMaxCandidates) ?? 5,
   maxCandidates: num(process.env.MAX_RERANK_CANDIDATES, jRerank.maxCandidates) ?? 20,
   llmMaxTokens: num(process.env.LLM_RERANK_MAX_TOKENS, jRerank.llmMaxTokens) ?? 200,
+};
+
+// ── LLM config ──────────────────────────────────────────────────────────────
+// Каждая задача имеет свою модель + ключ + URL. Если ключ/URL не заданы для
+// задачи — наследуются глобальные (OPENAI_API_KEY / OPENAI_BASE_URL).
+// Поддерживает любые OpenAI-совместимые провайдеры (DeepSeek, Together, Groq,
+// vLLM, Ollama, и т.д.) через baseUrl.
+
+export interface LLMTaskConfig {
+  model: string;
+  apiKey?: string;
+  baseUrl?: string;
+}
+
+export interface LLMConfig {
+  defaultApiKey: string | undefined;
+  defaultBaseUrl: string | undefined;
+  extraction: LLMTaskConfig;
+  queryExpansion: LLMTaskConfig;
+  rerank: LLMTaskConfig;
+  sourceProfile: LLMTaskConfig;
+  compressor: LLMTaskConfig;
+  oracle: LLMTaskConfig;
+  synthesis: LLMTaskConfig;
+  pageExtractor: LLMTaskConfig;
+  researchAgent: LLMTaskConfig;
+  taskRunner: LLMTaskConfig;
+  videoStt: LLMTaskConfig;
+  memoryExtraction: LLMTaskConfig;
+  consolidation: LLMTaskConfig;
+  dialectic: LLMTaskConfig;
+  inference: LLMTaskConfig;
+  sessionSummary: LLMTaskConfig;
+  relation: LLMTaskConfig;
+  temporal: LLMTaskConfig;
+}
+
+function task(
+  name: string,
+  jCfg: Record<string, any>,
+  defaultModel: string
+): LLMTaskConfig {
+  const j = (jCfg[name] ?? {}) as Record<string, any>;
+  return {
+    model: str(process.env[`LLM_${name.toUpperCase()}_MODEL`], j.model) || defaultModel,
+    apiKey: process.env[`LLM_${name.toUpperCase()}_API_KEY`] || j.apiKey,
+    baseUrl: process.env[`LLM_${name.toUpperCase()}_BASE_URL`] || j.baseUrl,
+  };
+}
+
+const jTasks = (jLlm.tasks ?? {}) as Record<string, any>;
+
+export const llm: LLMConfig = {
+  defaultApiKey: process.env.OPENAI_API_KEY || jLlm.defaultApiKey || jLlm.apiKey,
+  defaultBaseUrl: process.env.OPENAI_BASE_URL || jLlm.defaultBaseUrl || jLlm.baseUrl,
+  extraction: task("extraction", jTasks, "gpt-4o-mini"),
+  queryExpansion: task("queryExpansion", jTasks, "gpt-4o-mini"),
+  rerank: task("rerank", jTasks, "gpt-4o-mini"),
+  sourceProfile: task("sourceProfile", jTasks, "gpt-4o-mini"),
+  compressor: task("compressor", jTasks, "gpt-4o-mini"),
+  oracle: task("oracle", jTasks, "gpt-4o"),
+  synthesis: task("synthesis", jTasks, "gpt-4o-mini"),
+  pageExtractor: task("pageExtractor", jTasks, "gpt-4o-mini"),
+  researchAgent: task("researchAgent", jTasks, "gpt-4o"),
+  taskRunner: task("taskRunner", jTasks, "gpt-4o"),
+  videoStt: task("videoStt", jTasks, "gpt-4o-mini-transcribe"),
+  memoryExtraction: task("memoryExtraction", jTasks, "gpt-5.4-mini"),
+  consolidation: task("consolidation", jTasks, "gpt-5.4-mini"),
+  dialectic: task("dialectic", jTasks, "gpt-5.4-mini"),
+  inference: task("inference", jTasks, "gpt-5.4-mini"),
+  sessionSummary: task("sessionSummary", jTasks, "gpt-5.4-mini"),
+  relation: task("relation", jTasks, "gpt-5.4-mini"),
+  temporal: task("temporal", jTasks, "gpt-5.4-mini"),
 };

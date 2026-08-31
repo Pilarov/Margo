@@ -1,12 +1,10 @@
-import OpenAI from "openai";
 import { z } from "zod";
 import type { ExtractedMemory, ExtractionContext, MemoryType } from "./types.js";
+import { getLLMClient } from "../llm-client.js";
+import { llm as llmCfg } from "../../config.js";
 
 function getOpenAIClient() {
-  return new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY || "",
-    ...(process.env.OPENAI_BASE_URL ? { baseURL: process.env.OPENAI_BASE_URL } : {}),
-  });
+  return getLLMClient(llmCfg.memoryExtraction);
 }
 
 function shouldRetryWithoutStructuredOutput(err: any): boolean {
@@ -128,7 +126,7 @@ export async function extractMemories(
 
   const userPrompt = buildUserPrompt(chunk, context);
 
-  const model = process.env.EXTRACTOR_MODEL || "gpt-5.4-mini";
+  const model = llmCfg.memoryExtraction.model;
   const isGpt5 = /^gpt-5/.test(model);
 
   // gpt-5 series uses max_completion_tokens + json_schema; gpt-4 uses max_tokens + json_object

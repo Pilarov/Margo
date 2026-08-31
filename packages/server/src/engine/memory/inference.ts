@@ -1,16 +1,14 @@
 import OpenAI from "openai";
 import { z } from "zod";
 import type { MemorySourceRole, MemoryType, ExtractedMemory } from "./types.js";
+import { getLLMClient } from "../llm-client.js";
+import { llm as llmCfg } from "../../config.js";
 
 // ── Lazy clients ──────────────────────────────────────────────────────────────
 
 function getOpenAI(): OpenAI | null {
-  const apiKey = process.env.OPENAI_API_KEY || "";
-  if (!apiKey) return null;
-  return new OpenAI({
-    apiKey,
-    ...(process.env.OPENAI_BASE_URL ? { baseURL: process.env.OPENAI_BASE_URL } : {}),
-  });
+  if (!llmCfg.defaultApiKey) return null;
+  return getLLMClient(llmCfg.inference);
 }
 
 function shouldRetryWithoutStructuredOutput(err: any): boolean {
@@ -19,11 +17,7 @@ function shouldRetryWithoutStructuredOutput(err: any): boolean {
 }
 
 function getInferenceModel(modelOverride?: string): string {
-  return modelOverride
-    || process.env.INFERENCE_MODEL
-    || process.env.EXTRACTOR_MODEL
-    || process.env.OPENAI_MODEL
-    || "gpt-5.4-mini";
+  return modelOverride || llmCfg.inference.model;
 }
 
 function getMaxOutputTokensParam(model: string, maxTokens: number) {

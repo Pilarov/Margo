@@ -12,9 +12,10 @@
  * Developer does nothing. runTurn() → memory persists → next session, it's there.
  */
 
-import OpenAI from "openai";
 import { prisma } from "../../db/index.js";
 import { writeMemoryCanonical } from "./write.js";
+import { getLLMClient } from "../llm-client.js";
+import { llm as llmCfg } from "../../config.js";
 
 const SESSION_INACTIVITY_MS = parseInt(
   process.env.SESSION_INACTIVITY_THRESHOLD_MS ?? "7200000", // 2h default
@@ -40,14 +41,11 @@ interface StaleSession {
 }
 
 function getOpenAI() {
-  return new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY ?? "",
-    ...(process.env.OPENAI_BASE_URL ? { baseURL: process.env.OPENAI_BASE_URL } : {}),
-  });
+  return getLLMClient(llmCfg.sessionSummary);
 }
 
 function getSessionSummaryModel(): string {
-  return process.env.SESSION_SUMMARY_MODEL || process.env.OPENAI_MODEL || "gpt-5.4-mini";
+  return llmCfg.sessionSummary.model;
 }
 
 function getMaxOutputTokensParam(model: string, maxTokens: number) {

@@ -7,6 +7,7 @@ import { randomUUID } from "crypto";
 import OpenAI from "openai";
 import { ingestDocument } from "../engine/ingest.js";
 import { synthesizeDocument, formatSynthesis } from "../engine/synthesis.js";
+import { llm as llmCfg } from "../config.js";
 
 type VideoPlatform = "youtube" | "loom" | "generic";
 
@@ -354,10 +355,10 @@ async function transcribeMediaWithOpenAI(url: string, language?: string): Promis
   await fs.writeFile(tmpPath, bytes);
 
   try {
-    const openai = new OpenAI({ apiKey });
+    const openai = new OpenAI({ apiKey, baseURL: llmCfg.videoStt.baseUrl || llmCfg.defaultBaseUrl });
     const transcript = await openai.audio.transcriptions.create({
       file: createReadStream(tmpPath) as any,
-      model: process.env.VIDEO_STT_MODEL || "gpt-4o-mini-transcribe",
+      model: llmCfg.videoStt.model,
       ...(language ? { language } : {}),
       response_format: "verbose_json" as any,
     } as any);

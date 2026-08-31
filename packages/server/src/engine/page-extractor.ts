@@ -1,6 +1,5 @@
-import OpenAI from "openai";
-
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+import { getLLMClient } from "./llm-client.js";
+import { llm as llmCfg } from "../config.js";
 
 /**
  * Extract structured data from HTML matching a given schema.
@@ -9,7 +8,7 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 export async function extractWithSchema(
   html: string,
   schema: Record<string, string>,
-  model = "gpt-4o-mini"
+  model = llmCfg.pageExtractor.model
 ): Promise<Record<string, any>> {
   if (Object.keys(schema).length === 0) return {};
 
@@ -18,7 +17,7 @@ export async function extractWithSchema(
     .map(([k, v]) => `  "${k}": ${v}`)
     .join(",\n");
 
-  const resp = await openai.chat.completions.create({
+  const resp = await getLLMClient(llmCfg.pageExtractor).chat.completions.create({
     model,
     temperature: 0,
     max_tokens: 2000,
@@ -111,8 +110,8 @@ export async function detectPricing(
   };
 
   const truncated = html.substring(0, 40000);
-  const resp = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
+  const resp = await getLLMClient(llmCfg.pageExtractor).chat.completions.create({
+    model: llmCfg.pageExtractor.model,
     temperature: 0,
     max_tokens: 2000,
     messages: [

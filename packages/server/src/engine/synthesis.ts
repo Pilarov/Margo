@@ -1,12 +1,14 @@
 import OpenAI from "openai";
+import { getLLMClient } from "./llm-client.js";
+import { llm as llmCfg } from "../config.js";
 
-const DEFAULT_MODEL = process.env.SYNTHESIS_MODEL || "gpt-4o-mini";
+const DEFAULT_MODEL = llmCfg.synthesis.model;
 const MAX_INPUT_CHARS = 40_000;
 
 let _openai: OpenAI | null = null;
 function getOpenAI(): OpenAI | null {
-  if (!process.env.OPENAI_API_KEY) return null;
-  if (!_openai) _openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  if (!llmCfg.defaultApiKey) return null;
+  if (!_openai) _openai = getLLMClient(llmCfg.synthesis);
   return _openai;
 }
 

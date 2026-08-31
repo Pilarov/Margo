@@ -5,14 +5,12 @@
  * Answers natural-language questions about a user by running an LLM against their memory model.
  */
 
-import OpenAI from "openai";
 import { loadUserModelMemories, synthesizeUserModel } from "./user-model.js";
+import { getLLMClient } from "../llm-client.js";
+import { llm as llmCfg } from "../../config.js";
 
 function getOpenAIClient() {
-  return new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY || "",
-    ...(process.env.OPENAI_BASE_URL ? { baseURL: process.env.OPENAI_BASE_URL } : {}),
-  });
+  return getLLMClient(llmCfg.dialectic);
 }
 
 export type DialecticReasoningLevel = "minimal" | "low" | "medium" | "high";
@@ -26,7 +24,7 @@ const LEVEL_CONFIG: Record<DialecticReasoningLevel, { maxMemories: number; maxTo
 };
 
 function getModel(): string {
-  return process.env.DIALECTIC_MODEL || process.env.OPENAI_MODEL || "gpt-5.4-mini";
+  return llmCfg.dialectic.model;
 }
 
 function getMaxOutputTokensParam(model: string, maxTokens: number) {

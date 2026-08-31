@@ -6,18 +6,16 @@
  * OPTIMIZATION: Fast path for simple queries, LLM only for complex temporal
  */
 
-import OpenAI from "openai";
 import type { TemporalFilter } from "./types.js";
+import { getLLMClient } from "../llm-client.js";
+import { llm as llmCfg } from "../../config.js";
 
 function getOpenAI() {
-  return new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY || "",
-    ...(process.env.OPENAI_BASE_URL ? { baseURL: process.env.OPENAI_BASE_URL } : {}),
-  });
+  return getLLMClient(llmCfg.temporal);
 }
 
 function getTemporalModel(): string {
-  return process.env.TEMPORAL_MODEL || process.env.OPENAI_MODEL || "gpt-5.4-mini";
+  return llmCfg.temporal.model;
 }
 
 function getMaxOutputTokensParam(model: string, maxTokens: number) {

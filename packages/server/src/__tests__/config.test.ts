@@ -3,7 +3,7 @@ import { describe, it, expect } from "vitest";
 // These tests import the actual config module.
 // When no env vars are set and no retaindb.config.json exists,
 // all values fall back to their documented defaults.
-import { embedding, rerank } from "../../config.js";
+import { embedding, rerank, llm } from "../config.js";
 
 describe("ServerConfig: Embedding defaults", () => {
   it("should default mode to 'remote'", () => {
@@ -101,5 +101,46 @@ describe("ServerConfig: Rerank defaults", () => {
   it("should have provider in valid set", () => {
     const validProviders = ["local", "remote"];
     expect(validProviders).toContain(rerank.provider);
+  });
+});
+
+describe("ServerConfig: LLM defaults", () => {
+  it("should default extraction model to gpt-4o-mini", () => {
+    expect(llm.extraction.model).toBe("gpt-4o-mini");
+  });
+
+  it("should default oracle model to gpt-4o", () => {
+    expect(llm.oracle.model).toBe("gpt-4o");
+  });
+
+  it("should default memory extraction model to gpt-5.4-mini", () => {
+    expect(llm.memoryExtraction.model).toBe("gpt-5.4-mini");
+  });
+
+  it("should default dialectic model to gpt-5.4-mini", () => {
+    expect(llm.dialectic.model).toBe("gpt-5.4-mini");
+  });
+
+  it("should have undefined apiKey/baseUrl by default", () => {
+    expect(llm.defaultApiKey === undefined || llm.defaultApiKey === "").toBe(true);
+  });
+
+  it("should allow per-task apiKey/baseUrl to be undefined", () => {
+    expect(llm.extraction.apiKey === undefined || llm.extraction.apiKey === "").toBe(true);
+    expect(llm.extraction.baseUrl === undefined || llm.extraction.baseUrl === "").toBe(true);
+  });
+
+  it("should have a model for every task", () => {
+    const tasks = [
+      "extraction", "queryExpansion", "rerank", "sourceProfile", "compressor",
+      "oracle", "synthesis", "pageExtractor", "researchAgent", "taskRunner",
+      "videoStt", "memoryExtraction", "consolidation", "dialectic", "inference",
+      "sessionSummary", "relation", "temporal",
+    ];
+    for (const t of tasks) {
+      const task = (llm as any)[t];
+      expect(task.model).toBeTypeOf("string");
+      expect(task.model.length).toBeGreaterThan(0);
+    }
   });
 });

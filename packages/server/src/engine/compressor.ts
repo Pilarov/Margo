@@ -1,7 +1,7 @@
 import OpenAI from "openai";
 import { createHash } from "crypto";
-
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+import { getLLMClient } from "./llm-client.js";
+import { llm as llmCfg } from "../config.js";
 
 // ─── Types ───────────────────────────────────────────────────
 
@@ -193,8 +193,8 @@ async function extractCompress(
   maxTokens: number
 ): Promise<CompressedContext> {
   try {
-    const res = await openai.chat.completions.create({
-      model: "gpt-4o-mini", // Fixed: was "gpt-4.1-nano" which doesn't exist
+    const res = await getLLMClient(llmCfg.compressor).chat.completions.create({
+      model: llmCfg.compressor.model,
       messages: [
         {
           role: "system",
@@ -252,8 +252,8 @@ async function summarizeCompress(
       blocks.map(async (block) => {
         if (estimateTokens(block) <= budgetPerBlock) return block;
 
-        const res = await openai.chat.completions.create({
-          model: "gpt-4o-mini", // Fixed: was "gpt-4.1-nano" which doesn't exist
+        const res = await getLLMClient(llmCfg.compressor).chat.completions.create({
+          model: llmCfg.compressor.model,
           messages: [
             {
               role: "system",
@@ -310,8 +310,8 @@ export async function summarizeChunk(content: string, chunkType: string): Promis
       ? "Summarize this code in 2-3 sentences. Include: function/class names, what it does, parameters, return type."
       : "Summarize this text in 2-3 sentences. Preserve key facts, names, and important details.";
 
-    const res = await openai.chat.completions.create({
-      model: "gpt-4o-mini", // Fixed: was "gpt-4.1-nano" which doesn't exist
+    const res = await getLLMClient(llmCfg.compressor).chat.completions.create({
+      model: llmCfg.compressor.model,
       messages: [
         { role: "system", content: prompt },
         { role: "user", content: content.slice(0, 3000) },

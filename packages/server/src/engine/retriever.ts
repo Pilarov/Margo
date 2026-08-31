@@ -3,25 +3,13 @@ import { Prisma } from "@prisma/client";
 import { embedSingle } from "./embeddings.js";
 import { compressContext } from "./compressor.js";
 import { createHash } from "crypto";
-import OpenAI from "openai";
 import { rerankWithCrossEncoder, shouldUseLLMFallback } from "./embeddings-local.js";
 import { getFromCache, setInCache } from "./cache.js";
 import { recordRetrievalWorkloadSample, recordStageBreakdown } from "./latency-tracing.js";
 import { rerankWithInferenceService } from "./inference-client.js";
 import { selectOracleCandidateChunkIds } from "./oracle-select.js";
-import { rerank as rCfg } from "../config.js";
-
-let openaiClient: OpenAI | null = null;
-
-function getOpenAIClient(): OpenAI {
-  if (openaiClient) return openaiClient;
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    throw new Error("OPENAI_API_KEY is required for LLM reranking");
-  }
-  openaiClient = new OpenAI({ apiKey });
-  return openaiClient;
-}
+import { rerank as rCfg, llm as llmCfg } from "../config.js";
+import { getLLMClient } from "./llm-client.js";
 
 // Reranking mode: 'balanced' (cross-encoder + strict LLM guard), 'cross-encoder', 'llm'
 const RERANK_MODE = rCfg.mode;
@@ -773,9 +761,9 @@ async function expandQueryAndSearch(
   oracleFilter?: string[],
 ): Promise<RetrievalResult[]> {
   try {
-    const client = getOpenAIClient();
+    const client = getLLMClient(llmCfg.queryExpansion);
     const resp = await client.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: llmCfg.queryExpansion.model,
       max_tokens: rCfg.llmMaxTokens,
       temperature: 0.3,
       messages: [{
@@ -1585,9 +1573,9 @@ Rank these ${candidates.length} text passages by relevance (most relevant first)
 ${candidates.map((r, i) => `[${i}] ${r.content.slice(0, 300)}`).join("\n\n")}`;
 
   try {
-    const openai = getOpenAIClient();
+    const openai = getLLMClient(llmCfg.rerank);
     const res = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: llmCfg.rerank.model,
       messages: [{ role: "user", content: prompt }],
       temperature: 0,
       max_tokens: rCfg.llmMaxTokens,

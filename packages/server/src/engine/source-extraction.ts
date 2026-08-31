@@ -11,12 +11,10 @@
  *   await generateSourceProfile(sourceId, projectId, { sourceType: "web", rootUrl });
  */
 
-import OpenAI from "openai";
 import { prisma } from "../db/index.js"; // used for document queries
 import { ingestDocument } from "./ingest.js";
-import { embedding as cfg } from "../config.js";
-
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+import { embedding as cfg, llm as llmCfg } from "../config.js";
+import { getLLMClient } from "./llm-client.js";
 
 export interface SourceProfileOptions {
   sourceType: string;
@@ -215,8 +213,8 @@ Respond with JSON only:
 }`;
     }
 
-    const res = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+    const res = await getLLMClient(llmCfg.sourceProfile).chat.completions.create({
+      model: llmCfg.sourceProfile.model,
       messages: [{ role: "user", content: prompt }],
       temperature: 0,
       max_tokens: cfg.extractionMaxTokens,

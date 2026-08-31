@@ -1,9 +1,8 @@
-import OpenAI from "openai";
 import { prisma } from "../db/index.js";
 import { embedSingle } from "./embeddings.js";
 import { writeMemoryCanonical } from "./memory/write.js";
-
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+import { getLLMClient } from "./llm-client.js";
+import { llm as llmCfg } from "../config.js";
 
 // ═══════════════════════════════════════════════════════════════
 // ENTITY EXTRACTION (runs during ingestion)
@@ -63,8 +62,8 @@ Respond with JSON only:
 }`;
 
   try {
-    const res = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+    const res = await getLLMClient(llmCfg.extraction).chat.completions.create({
+      model: llmCfg.extraction.model,
       messages: [{ role: "user", content: prompt }],
       temperature: 0,
       max_tokens: 1000,
@@ -207,8 +206,8 @@ Respond with JSON only:
 }`;
 
   try {
-    const res = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+    const res = await getLLMClient(llmCfg.extraction).chat.completions.create({
+      model: llmCfg.extraction.model,
       messages: [{ role: "user", content: prompt }],
       temperature: 0,
       max_tokens: 500,
