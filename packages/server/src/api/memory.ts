@@ -10,7 +10,7 @@ import crypto from "crypto";
 import { prisma } from "../db/index.js";
 import type { AuthContext } from "../middleware/auth.js";
 import { rateLimitMiddleware, RateLimits } from "../middleware/rate-limit.js";
-import { dialecticQuery } from "../engine/memory/dialectic.js";
+import { dialecticQuery, type DialecticReasoningLevel } from "../engine/memory/dialectic.js";
 import { synthesizeAgentModel, seedAgentIdentity } from "../engine/memory/agent-model.js";
 import { extractExplicitMemory } from "../engine/memory/patterns.js";
 import {
@@ -2645,6 +2645,43 @@ memoryRoutes.post(
       return c.json({ success: true, ...result });
     } catch (err: any) {
       return c.json({ success: false, error: err?.message || "Dialectic query failed" }, 500);
+    }
+  }
+);
+
+// ─── Dialectic adapter (Hermes RetainDB plugin contract) ──────────────────────
+// The Hermes RetainDB plugin calls POST /v1/memory/profile/{user_id}/ask with
+// body { project, query, reasoning_level } and reads result.answer.
+// This maps that contract onto the existing dialecticQuery engine.
+
+memoryRoutes.post(
+  "/v1/memory/profile/:userId/ask",
+  rateLimitMiddleware(RateLimits.query),
+  zValidator(
+    "json",
+    z.object({
+      project: z.string().min(1),
+      query: z.string().min(1).max(2000),
+      reasoning_level: z.enum(["minimal", "low", "medium", "high"]).optional().default("low"),
+    })
+  ),
+  async (c) => {
+    const auth = c.get("auth") as AuthContext;
+    const userId = c.req.param("userId");
+    const { project, query, reasoning_level } = c.req.valid("json");
+
+    try {
+      const projectEntity = await ensureProject(auth.orgId, project, auth.isAdmin);
+      const result = await dialecticQuery({
+        userId,
+        projectId: projectEntity.id,
+        query,
+        reasoningLevel: reasoning_level as DialecticReasoningLevel,
+      });
+      return c.json(result);
+    } catch (err: any) {
+      console.error("[dialectic] /ask failed:", err?.message || err);
+      return c.json({ error: err?.message || "Dialectic query failed" }, 500);
     }
   }
 );
