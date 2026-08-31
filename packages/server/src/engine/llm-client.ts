@@ -1,5 +1,6 @@
 import OpenAI from "openai";
-import { llm, LLMTaskConfig } from "../config.js";
+import { llm } from "../config.js";
+import type { LLMTaskConfig } from "../config.js";
 
 const _clients = new Map<string, OpenAI>();
 
