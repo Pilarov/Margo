@@ -6,7 +6,7 @@ dist/
 .turbo/
 .DS_Store
 Thumbs.db
-prisma/migrations/
 *.db
 *.db-journal
+packages/server/data/
 coverage/
