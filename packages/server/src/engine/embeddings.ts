@@ -1,7 +1,7 @@
 import OpenAI from "openai";
 import { embedLocal, embedSingleLocal } from "./embeddings-local.js";
 import { embedWithInferenceService } from "./inference-client.js";
-import { embedding as cfg } from "../config.js";
+import { embedding as cfg, llm as llmCfg } from "../config.js";
 
 let openaiClient: OpenAI | null = null;
 
@@ -11,7 +11,7 @@ function getOpenAIClient(): OpenAI {
   if (!apiKey) {
     throw new Error("OPENAI_API_KEY is required when using OpenAI embeddings");
   }
-  openaiClient = new OpenAI({ apiKey });
+  openaiClient = new OpenAI({ apiKey, baseURL: llmCfg.defaultBaseUrl });
   return openaiClient;
 }
 
