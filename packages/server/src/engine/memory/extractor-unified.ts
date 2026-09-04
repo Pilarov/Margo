@@ -1,6 +1,28 @@
 import { extractExplicitMemory } from "./patterns.js";
 import { extractImplicitMemories } from "./inference.js";
+import { extractMemoriesOnePass } from "./extractor-onepass.js";
+import { extractionMode } from "../../config.js";
 import type { ExtractedMemory, MemoryExtractionOptions, MemorySourceRole } from "./types.js";
+
+// Routes LLM memory inference to the schema-driven one-pass extractor when
+// EXTRACTION_MODE=one_pass, otherwise keeps the default single-call inference.
+function runInference(
+  message: string,
+  context: string,
+  opts: { minConfidence?: number; sourceRole?: MemorySourceRole; model?: string }
+): Promise<ExtractedMemory[]> {
+  if (extractionMode === "one_pass") {
+    return extractMemoriesOnePass(message, context, {
+      minConfidence: opts.minConfidence,
+      sourceRole: opts.sourceRole,
+    });
+  }
+  return extractImplicitMemories(message, context, {
+    minConfidence: opts.minConfidence,
+    sourceRole: opts.sourceRole,
+    model: opts.model,
+  });
+}
 
 export interface ExtractionResult {
   explicit: ExtractedMemory[];
@@ -81,7 +103,7 @@ export async function extractMemories(
   }
 
   if (enableInference && message.trim()) {
-    const inferredMemories = await extractImplicitMemories(message, context, {
+    const inferredMemories = await runInference(message, context, {
       minConfidence,
       sourceRole: options.sourceRole,
     });
@@ -96,7 +118,7 @@ export async function extractMemories(
       && borderlineConfidence >= Math.max(minConfidence - 0.05, 0.45);
 
     if (shouldEscalate) {
-      const strongerMemories = await extractImplicitMemories(message, context, {
+      const strongerMemories = await runInference(message, context, {
         model: options.escalationModel || "gpt-5.4-mini",
         minConfidence,
         sourceRole: options.sourceRole,
@@ -169,7 +191,7 @@ export async function extractMemoriesForSession(
       // contain high-value facts that pure inference misses)
       const [patternMatches, inferredMemories] = await Promise.all([
         Promise.resolve(extractExplicitMemory(msg.content)),
-        extractImplicitMemories(msg.content, context, {
+        runInference(msg.content, context, {
           minConfidence: options.minConfidence ?? 0.65,
           sourceRole: "assistant",
         }),

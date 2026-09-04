@@ -147,10 +147,12 @@ function task(
   defaultModel: string
 ): LLMTaskConfig {
   const j = (jCfg[name] ?? {}) as Record<string, any>;
+  // camelCase task name → SNAKE_CASE env suffix, e.g. memoryExtraction → MEMORY_EXTRACTION
+  const envSuffix = name.replace(/[A-Z]/g, (c) => `_${c}`).toUpperCase();
   return {
-    model: str(process.env[`LLM_${name.toUpperCase()}_MODEL`], j.model) || defaultModel,
-    apiKey: process.env[`LLM_${name.toUpperCase()}_API_KEY`] || j.apiKey,
-    baseUrl: process.env[`LLM_${name.toUpperCase()}_BASE_URL`] || j.baseUrl,
+    model: str(process.env[`LLM_${envSuffix}_MODEL`], j.model) || defaultModel,
+    apiKey: process.env[`LLM_${envSuffix}_API_KEY`] || j.apiKey,
+    baseUrl: process.env[`LLM_${envSuffix}_BASE_URL`] || j.baseUrl,
   };
 }
 
@@ -178,3 +180,21 @@ export const llm: LLMConfig = {
   relation: task("relation", jTasks, "gpt-5.4-mini"),
   temporal: task("temporal", jTasks, "gpt-5.4-mini"),
 };
+
+// ── Extraction mode ─────────────────────────────────────────────────────────
+// Controls how memories are extracted from messages (ADR-002):
+//   pattern  — regex patterns only, no LLM (local default)
+//   per_type — pattern + single-call LLM inference (current behavior)
+//   one_pass — pattern + schema-driven single LLM call across all memory types
+const jExtraction = (json.extraction ?? {}) as Record<string, any>;
+
+export type ExtractionMode = "pattern" | "per_type" | "one_pass";
+
+const EXTRACTION_MODE_VALUES: readonly ExtractionMode[] = ["pattern", "per_type", "one_pass"];
+
+export const extractionMode: ExtractionMode = (() => {
+  const raw = str(process.env.EXTRACTION_MODE, jExtraction.mode) || "per_type";
+  return (EXTRACTION_MODE_VALUES as readonly string[]).includes(raw)
+    ? (raw as ExtractionMode)
+    : "per_type";
+})();

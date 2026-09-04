@@ -217,6 +217,12 @@ Legacy-псевдонимы (SOTA-модели, по-прежнему работ
 | `SYNTHESIS_MODEL` | `synthesis` |
 | `VIDEO_STT_MODEL` | `videoStt` |
 
+### Extraction
+
+| Переменная | По умолчанию | Описание |
+|---|---|---|
+| `EXTRACTION_MODE` | `per_type` | `pattern` — regex без LLM (local); `per_type` — pattern + одиночный LLM-inference (текущее поведение); `one_pass` — pattern + schema-driven одиночный LLM-вызов по всем типам памяти (ADR-002) |
+
 ### Embedding
 
 | Переменная | По умолчанию | Описание |

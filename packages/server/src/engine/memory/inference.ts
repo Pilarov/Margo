@@ -66,7 +66,7 @@ const MEMORY_TYPE_MAP: Record<string, typeof MEMORY_TYPES[number]> = {
   workflow: "workflow",
 };
 
-const InferredMemorySchema = z.object({
+export const InferredMemorySchema = z.object({
   content: z.string().min(8).max(400),
   memoryType: z.enum(MEMORY_TYPES),
   confidence: z.number().min(0).max(1),
@@ -160,7 +160,7 @@ async function runWithOpenAI(message: string, context: string, model: string): P
 
 // ── Response parsing ──────────────────────────────────────────────────────────
 
-function parseInferenceResponse(text: string): unknown[] {
+export function parseInferenceResponse(text: string): z.infer<typeof InferredMemorySchema>[] {
   let parsed: unknown;
   try {
     const jsonText = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "").trim();

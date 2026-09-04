@@ -81,4 +81,15 @@ describe("LLM config: task() resolution", () => {
     expect(llm.dialectic.model).toBe("gpt-5.4-mini");
     expect(llm.consolidation.model).toBe("gpt-5.4-mini");
   });
+
+  it("should read camelCase task models from SNAKE_CASE env names", async () => {
+    const { llm } = await loadConfigWithEnv({
+      LLM_MEMORY_EXTRACTION_MODEL: "deepseek-v4-flash",
+      LLM_QUERY_EXPANSION_MODEL: "deepseek-v4-flash",
+      LLM_SESSION_SUMMARY_MODEL: "deepseek-v4-pro",
+    });
+    expect(llm.memoryExtraction.model).toBe("deepseek-v4-flash");
+    expect(llm.queryExpansion.model).toBe("deepseek-v4-flash");
+    expect(llm.sessionSummary.model).toBe("deepseek-v4-pro");
+  });
 });
