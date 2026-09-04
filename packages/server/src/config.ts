@@ -198,3 +198,21 @@ export const extractionMode: ExtractionMode = (() => {
     ? (raw as ExtractionMode)
     : "per_type";
 })();
+
+// ── Consolidation mode ──────────────────────────────────────────────────────
+// Controls memory consolidation (ADR-003):
+//   basic   — dedup + decay (local default)
+//   dreamer — basic + inductive reasoning + peer-card
+//   off     — no consolidation
+const jConsolidation = (json.consolidation ?? {}) as Record<string, any>;
+
+export type ConsolidationMode = "basic" | "dreamer" | "off";
+
+const CONSOLIDATION_MODE_VALUES: readonly ConsolidationMode[] = ["basic", "dreamer", "off"];
+
+export const consolidationMode: ConsolidationMode = (() => {
+  const raw = str(process.env.CONSOLIDATION_MODE, jConsolidation.mode) || "basic";
+  return (CONSOLIDATION_MODE_VALUES as readonly string[]).includes(raw)
+    ? (raw as ConsolidationMode)
+    : "basic";
+})();

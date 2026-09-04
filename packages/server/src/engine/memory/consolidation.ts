@@ -6,7 +6,8 @@
 import { db } from "../../db/index.js";
 import { embedSingle } from "../embeddings.js";
 import { getLLMClient } from "../llm-client.js";
-import { llm as llmCfg } from "../../config.js";
+import { llm as llmCfg, consolidationMode } from "../../config.js";
+import { runDreamerConsolidation } from "./dreamer.js";
 
 function getOpenAI() {
   return getLLMClient(llmCfg.consolidation);
@@ -282,6 +283,11 @@ export async function consolidateMemories(params: {
   console.log(
     `\n✅ Consolidation complete: ${memoriesMerged} clusters merged, ${memoriesDeactivated} memories deactivated`
   );
+
+  // Dreamer pass (ADR-003): inductive reasoning + peer-card on top of dedup.
+  if (consolidationMode === "dreamer") {
+    await runDreamerConsolidation({ projectId, userId });
+  }
 
   return {
     clustersFound: clusters.length,

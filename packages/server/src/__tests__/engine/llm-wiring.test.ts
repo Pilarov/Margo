@@ -30,6 +30,7 @@ const WIRING: WiringSpec[] = [
   { file: "engine/retriever.ts", expectedTask: "rerank", callSites: 1 },
   { file: "api/research-agent.ts", expectedTask: "researchAgent", callSites: 3 },
   { file: "engine/memory/consolidation.ts", expectedTask: "consolidation", callSites: 1 },
+  { file: "engine/memory/dreamer.ts", expectedTask: "consolidation", callSites: 1 },
   { file: "engine/memory/dialectic.ts", expectedTask: "dialectic", callSites: 1 },
   { file: "engine/memory/extractor.ts", expectedTask: "memoryExtraction", callSites: 1 },
   { file: "engine/memory/extractor-onepass.ts", expectedTask: "memoryExtraction", callSites: 1 },

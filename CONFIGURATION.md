@@ -223,6 +223,12 @@ Legacy-псевдонимы (SOTA-модели, по-прежнему работ
 |---|---|---|
 | `EXTRACTION_MODE` | `per_type` | `pattern` — regex без LLM (local); `per_type` — pattern + одиночный LLM-inference (текущее поведение); `one_pass` — pattern + schema-driven одиночный LLM-вызов по всем типам памяти (ADR-002) |
 
+### Consolidation
+
+| Переменная | По умолчанию | Описание |
+|---|---|---|
+| `CONSOLIDATION_MODE` | `basic` | `basic` — dedup + decay; `dreamer` — basic + inductive reasoning + peer-card (требует LLM-ключ); `off` — без консолидации (ADR-003) |
+
 ### Embedding
 
 | Переменная | По умолчанию | Описание |

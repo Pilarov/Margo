@@ -42,6 +42,7 @@ const MEMORY_TYPES = [
   "factual", "preference", "event", "relationship", "opinion", "goal", "instruction",
   "decision", "constraint", "solution", "project_state", "correction", "workflow",
 ] as const;
+export { MEMORY_TYPES };
 const MEMORY_TYPE_MAP: Record<string, typeof MEMORY_TYPES[number]> = {
   fact: "factual",
   facts: "factual",
@@ -65,6 +66,7 @@ const MEMORY_TYPE_MAP: Record<string, typeof MEMORY_TYPES[number]> = {
   correction: "correction",
   workflow: "workflow",
 };
+export { MEMORY_TYPE_MAP };
 
 export const InferredMemorySchema = z.object({
   content: z.string().min(8).max(400),
