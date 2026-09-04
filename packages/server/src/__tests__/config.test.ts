@@ -3,7 +3,7 @@ import { describe, it, expect } from "vitest";
 // These tests import the actual config module.
 // When no env vars are set and no retaindb.config.json exists,
 // all values fall back to their documented defaults.
-import { embedding, rerank, llm } from "../config.js";
+import { embedding, rerank, llm, extractionMode, consolidationMode, EMBEDDING_DIM } from "../config.js";
 
 describe("ServerConfig: Embedding defaults", () => {
   it("should default mode to 'remote'", () => {
@@ -142,5 +142,19 @@ describe("ServerConfig: LLM defaults", () => {
       expect(task.model).toBeTypeOf("string");
       expect(task.model.length).toBeGreaterThan(0);
     }
+  });
+});
+
+describe("ServerConfig: mode defaults", () => {
+  it("should default extractionMode to per_type", () => {
+    expect(extractionMode).toBe("per_type");
+  });
+
+  it("should default consolidationMode to basic", () => {
+    expect(consolidationMode).toBe("basic");
+  });
+
+  it("should default EMBEDDING_DIM to 1024", () => {
+    expect(EMBEDDING_DIM).toBe(1024);
   });
 });

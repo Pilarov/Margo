@@ -92,4 +92,24 @@ describe("LLM config: task() resolution", () => {
     expect(llm.queryExpansion.model).toBe("deepseek-v4-flash");
     expect(llm.sessionSummary.model).toBe("deepseek-v4-pro");
   });
+
+  it("should read extractionMode from EXTRACTION_MODE env", async () => {
+    const { extractionMode } = await loadConfigWithEnv({ EXTRACTION_MODE: "one_pass" });
+    expect(extractionMode).toBe("one_pass");
+  });
+
+  it("should fall back extractionMode to per_type for invalid values", async () => {
+    const { extractionMode } = await loadConfigWithEnv({ EXTRACTION_MODE: "bogus" });
+    expect(extractionMode).toBe("per_type");
+  });
+
+  it("should read consolidationMode from CONSOLIDATION_MODE env", async () => {
+    const { consolidationMode } = await loadConfigWithEnv({ CONSOLIDATION_MODE: "dreamer" });
+    expect(consolidationMode).toBe("dreamer");
+  });
+
+  it("should read EMBEDDING_DIM from env", async () => {
+    const { EMBEDDING_DIM } = await loadConfigWithEnv({ EMBEDDING_DIM: "768" });
+    expect(EMBEDDING_DIM).toBe(768);
+  });
 });

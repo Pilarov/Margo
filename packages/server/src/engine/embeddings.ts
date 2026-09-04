@@ -30,7 +30,7 @@ const REMOTE_INFERENCE_REQUIRED = cfg.remoteRequired;
 const LARGE_BATCH_THRESHOLD = cfg.largeBatchThreshold;
 
 // ── OpenAI ──────────────────────────────────────────────────────────────────
-async function embedWithOpenAI(texts: string[]): Promise<number[][]> {
+export async function embedWithOpenAI(texts: string[]): Promise<number[][]> {
   const openai = getOpenAIClient();
   const res = await openai.embeddings.create({
     model: "text-embedding-3-small",
@@ -47,7 +47,7 @@ async function embedWithOpenAI(texts: string[]): Promise<number[][]> {
 // NOTE: switching to gemini requires re-indexing existing vectors (768 vs 1024 dims).
 const GEMINI_DIMENSIONS = cfg.geminiDimensions;
 
-async function embedWithGemini(texts: string[]): Promise<number[][]> {
+export async function embedWithGemini(texts: string[]): Promise<number[][]> {
   const apiKey = process.env.GOOGLE_API_KEY;
   if (!apiKey) throw new Error("GOOGLE_API_KEY is required when EMBEDDING_MODE=gemini");
 

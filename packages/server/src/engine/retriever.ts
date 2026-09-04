@@ -584,7 +584,7 @@ function normalizeHost(host: string): string {
   return host.trim().toLowerCase().replace(/^www\./, "");
 }
 
-function uniqueStrings(values: Array<string | null | undefined>): string[] {
+export function uniqueStrings(values: Array<string | null | undefined>): string[] {
   return [...new Set(values.map((value) => String(value || "").trim()).filter(Boolean))];
 }
 
@@ -1419,7 +1419,7 @@ async function graphSearch(
 
 // ─── Reciprocal Rank Fusion ──────────────────────────────────
 
-function reciprocalRankFusion(
+export function reciprocalRankFusion(
   results: RetrievalResult[],
   vectorWeight: number,
   bm25Weight: number,
@@ -1617,7 +1617,7 @@ ${candidates.map((r, i) => `[${i}] ${r.content.slice(0, 300)}`).join("\n\n")}`;
 
 // ─── Deduplication ───────────────────────────────────────────
 
-function deduplicateResults(results: RetrievalResult[]): RetrievalResult[] {
+export function deduplicateResults(results: RetrievalResult[]): RetrievalResult[] {
   const seen = new Map<string, RetrievalResult>();
 
   for (const r of results) {
@@ -1672,7 +1672,7 @@ function buildChunkHeader(r: RetrievalResult): string {
   return parts.length > 0 ? `[${parts.join(" | ")}]` : "";
 }
 
-function estimateTokens(text: string): number {
+export function estimateTokens(text: string): number {
   return Math.ceil(text.length / 4);
 }
 

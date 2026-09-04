@@ -36,7 +36,7 @@ export interface ExtractionResult {
 const CHUNK_SIZE = 1800;
 const CHUNK_OVERLAP = 150;
 
-function chunkMessage(message: string): string[] {
+export function chunkMessage(message: string): string[] {
   if (message.length <= CHUNK_SIZE) return [message];
   const chunks: string[] = [];
   let offset = 0;
@@ -222,7 +222,7 @@ export async function extractMemoriesForSession(
  * Uses a simple heuristic: capitalised "First [Last]" not at sentence start,
  * preceded or followed by a pronoun in nearby text.
  */
-function buildSessionEntityMap(texts: string[]): Map<string, string> {
+export function buildSessionEntityMap(texts: string[]): Map<string, string> {
   const nameFreq = new Map<string, number>();
   const namePattern = /\b([A-Z][a-z]{1,20}(?:\s+[A-Z][a-z]{1,20})?)\b/g;
   const skipWords = new Set([
@@ -267,7 +267,7 @@ function buildSessionEntityMap(texts: string[]): Map<string, string> {
   return entityMap;
 }
 
-function deduplicateAndMerge(memories: ExtractedMemory[]): ExtractedMemory[] {
+export function deduplicateAndMerge(memories: ExtractedMemory[]): ExtractedMemory[] {
   const seen = new Map<string, ExtractedMemory>();
 
   for (const memory of memories) {
@@ -294,7 +294,7 @@ function deduplicateAndMerge(memories: ExtractedMemory[]): ExtractedMemory[] {
   return Array.from(seen.values());
 }
 
-function normalizeDedupeKey(type: string, content: string): string {
+export function normalizeDedupeKey(type: string, content: string): string {
   // Remove stop words, lowercase, sort significant words so order doesn't matter
   // e.g. "Works at Stripe" and "Stripe is where the user works" → same key
   const stopWords = new Set([

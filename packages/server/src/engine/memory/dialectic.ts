@@ -16,7 +16,7 @@ function getOpenAIClient() {
 export type DialecticReasoningLevel = "minimal" | "low" | "medium" | "high";
 
 // How many memories and how rich the prompt is per level
-const LEVEL_CONFIG: Record<DialecticReasoningLevel, { maxMemories: number; maxTokens: number }> = {
+export const LEVEL_CONFIG: Record<DialecticReasoningLevel, { maxMemories: number; maxTokens: number }> = {
   minimal: { maxMemories: 6,  maxTokens: 200 },
   low:     { maxMemories: 12, maxTokens: 350 },
   medium:  { maxMemories: 20, maxTokens: 600 },
@@ -33,7 +33,7 @@ function getMaxOutputTokensParam(model: string, maxTokens: number) {
     : { max_tokens: maxTokens };
 }
 
-function buildSystemPrompt(level: DialecticReasoningLevel): string {
+export function buildSystemPrompt(level: DialecticReasoningLevel): string {
   const base = `You are an AI that knows a specific user through their stored memories.
 Answer the question about this user based only on the memories provided.
 Be concise and factual. If the memories don't contain enough information to answer, say so briefly.`;
@@ -46,7 +46,7 @@ If there are contradictory memories, note the most recent one.
 Do not speculate beyond what the memories support.`;
 }
 
-function buildMemoryBlock(
+export function buildMemoryBlock(
   memories: Array<{ content: string; memoryType: string; importance: number; updatedAt: Date }>,
   maxMemories: number
 ): string {

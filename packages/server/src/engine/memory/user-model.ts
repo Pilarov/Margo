@@ -1,6 +1,6 @@
 import { db } from "../../db/index.js";
 
-type MemoryRecord = {
+export type MemoryRecord = {
   id: string;
   content: string;
   memoryType: string;
@@ -79,7 +79,7 @@ function byStrength(memories: MemoryRecord[]): MemoryRecord[] {
   });
 }
 
-function extractName(memories: MemoryRecord[]): string | null {
+export function extractName(memories: MemoryRecord[]): string | null {
   const candidates = byStrength(memories);
   for (const memory of candidates) {
     const content = memory.content;
@@ -96,7 +96,7 @@ function extractName(memories: MemoryRecord[]): string | null {
   return null;
 }
 
-function extractRole(memories: MemoryRecord[]): string | null {
+export function extractRole(memories: MemoryRecord[]): string | null {
   const candidates = byStrength(memories);
   for (const memory of candidates) {
     const content = memory.content;
@@ -116,7 +116,7 @@ function extractRole(memories: MemoryRecord[]): string | null {
   return null;
 }
 
-function collectPreferences(memories: MemoryRecord[]): string[] {
+export function collectPreferences(memories: MemoryRecord[]): string[] {
   return dedupeStrings(
     byStrength(memories)
       .filter((memory) => ["preference", "instruction", "opinion"].includes(memory.memoryType))
@@ -124,7 +124,7 @@ function collectPreferences(memories: MemoryRecord[]): string[] {
   ).slice(0, 6);
 }
 
-function collectGoals(memories: MemoryRecord[]): string[] {
+export function collectGoals(memories: MemoryRecord[]): string[] {
   return dedupeStrings(
     byStrength(memories)
       .filter((memory) => ["goal", "project_state", "workflow", "decision"].includes(memory.memoryType))
@@ -132,7 +132,7 @@ function collectGoals(memories: MemoryRecord[]): string[] {
   ).slice(0, 6);
 }
 
-function deriveWorkingStyle(preferences: string[], instructions: string[], entities: string[]): string | null {
+export function deriveWorkingStyle(preferences: string[], instructions: string[], entities: string[]): string | null {
   const joined = [...preferences, ...instructions].join(" ").toLowerCase();
   const descriptors: string[] = [];
   if (/\b(iterative|step by step|incremental)\b/.test(joined)) descriptors.push("iterative");
@@ -144,7 +144,7 @@ function deriveWorkingStyle(preferences: string[], instructions: string[], entit
   return descriptors.length > 0 ? descriptors.join(", ") : null;
 }
 
-function collectFrequentEntities(memories: MemoryRecord[]): string[] {
+export function collectFrequentEntities(memories: MemoryRecord[]): string[] {
   const counts = new Map<string, number>();
   for (const memory of memories) {
     for (const rawEntity of memory.entityMentions || []) {
@@ -160,7 +160,7 @@ function collectFrequentEntities(memories: MemoryRecord[]): string[] {
     .map(([entity]) => entity);
 }
 
-function computeCoverage(memories: MemoryRecord[], profile: Omit<UserModelProfile, "trust_level">): number {
+export function computeCoverage(memories: MemoryRecord[], profile: Omit<UserModelProfile, "trust_level">): number {
   const dimensions = [
     profile.name,
     profile.role,
@@ -178,7 +178,7 @@ function computeCoverage(memories: MemoryRecord[], profile: Omit<UserModelProfil
   return Number((fieldCoverage * 0.55 + evidenceCoverage * 0.3 + recallCoverage * 0.15).toFixed(2));
 }
 
-function computeTrustLevel(memories: MemoryRecord[], coverageScore: number): number {
+export function computeTrustLevel(memories: MemoryRecord[], coverageScore: number): number {
   if (memories.length === 0) return 0;
   const weightedConfidence =
     memories.reduce((sum, memory) => sum + clamp01(memory.confidence) * (0.5 + clamp01(memory.importance) * 0.5), 0) /

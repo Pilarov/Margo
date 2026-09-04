@@ -8,7 +8,7 @@
 
 import { db } from "../../db/index.js";
 
-type AgentMemoryRecord = {
+export type AgentMemoryRecord = {
   id: string;
   content: string;
   memoryType: string;
@@ -44,7 +44,7 @@ function cleanSentence(s: string): string {
   return s.replace(/\s+/g, " ").trim();
 }
 
-function extractPersona(memories: AgentMemoryRecord[]): string | null {
+export function extractPersona(memories: AgentMemoryRecord[]): string | null {
   const candidates = byStrength(memories);
   for (const m of candidates) {
     const patterns = [
@@ -59,7 +59,7 @@ function extractPersona(memories: AgentMemoryRecord[]): string | null {
   return null;
 }
 
-function collectInstructions(memories: AgentMemoryRecord[]): string[] {
+export function collectInstructions(memories: AgentMemoryRecord[]): string[] {
   return byStrength(memories)
     .filter((m) => ["instruction", "preference"].includes(m.memoryType))
     .map((m) => cleanSentence(m.content))
@@ -67,7 +67,7 @@ function collectInstructions(memories: AgentMemoryRecord[]): string[] {
     .slice(0, 8);
 }
 
-function collectCapabilities(memories: AgentMemoryRecord[]): string[] {
+export function collectCapabilities(memories: AgentMemoryRecord[]): string[] {
   const caps: string[] = [];
   const markers = ["can ", "able to ", "capable of ", "supports ", "handles "];
   for (const m of byStrength(memories)) {
@@ -80,7 +80,7 @@ function collectCapabilities(memories: AgentMemoryRecord[]): string[] {
   return caps;
 }
 
-function deriveWorkingStyle(memories: AgentMemoryRecord[]): string | null {
+export function deriveWorkingStyle(memories: AgentMemoryRecord[]): string | null {
   const joined = memories.map((m) => m.content).join(" ").toLowerCase();
   const descriptors: string[] = [];
   if (/\b(iterative|step.?by.?step|incremental)\b/.test(joined)) descriptors.push("iterative");
@@ -91,14 +91,14 @@ function deriveWorkingStyle(memories: AgentMemoryRecord[]): string | null {
   return descriptors.length > 0 ? descriptors.join(", ") : null;
 }
 
-function collectGoals(memories: AgentMemoryRecord[]): string[] {
+export function collectGoals(memories: AgentMemoryRecord[]): string[] {
   return byStrength(memories)
     .filter((m) => ["goal", "decision", "workflow"].includes(m.memoryType))
     .map((m) => cleanSentence(m.content))
     .slice(0, 4);
 }
 
-function computeCoverage(model: AgentSelfModel): number {
+export function computeCoverage(model: AgentSelfModel): number {
   const dims = [
     model.persona,
     model.persistent_instructions.length > 0 ? "instructions" : null,
