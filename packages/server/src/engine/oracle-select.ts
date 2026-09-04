@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "../db/index.js";
-import { toVectorLiteral } from "../db/vector.js";
+import { toVectorLiteral, dimensionCheck } from "../db/vector.js";
 
 export type OracleSelectScope = {
   seed_hits: Array<{
@@ -58,7 +58,7 @@ export async function selectOracleScope(params: {
     maxCandidateChunks = 1400,
   } = params;
 
-  if (!Array.isArray(queryEmbedding) || queryEmbedding.length === 0) {
+  if (!dimensionCheck(queryEmbedding)) {
     return { seed_hits: [], documents: [], candidate_chunk_ids: [] };
   }
 

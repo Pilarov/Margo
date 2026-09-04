@@ -5,7 +5,7 @@ import { Prisma } from "@prisma/client";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, resolve as resolvePath } from "node:path";
 import { prisma } from "../db/index.js";
-import { embeddingToSql } from "../db/vector.js";
+import { embeddingToSql, dimensionCheck } from "../db/vector.js";
 import { authMiddleware, type AuthContext } from "../middleware/auth.js";
 import { rateLimitMiddleware, RateLimits } from "../middleware/rate-limit.js";
 import { retrieve } from "../engine/retriever.js";
@@ -2714,6 +2714,9 @@ api.post(
     const project = await ensureProject(auth.orgId, body.project, auth.isAdmin);
 
     const queryEmbedding = await embedSingle(body.query);
+    if (!dimensionCheck(queryEmbedding)) {
+      return c.json({ memories: [] });
+    }
 
     // Parameterized SQL (avoid interpolating user input into WHERE clauses).
     const conditions: any[] = [
@@ -3180,6 +3183,9 @@ api.post(
     const project = await ensureProject(auth.orgId, body.project, auth.isAdmin);
 
     const queryEmbedding = await embedSingle(body.query);
+    if (!dimensionCheck(queryEmbedding)) {
+      return c.json({ entities: [], relations: [] });
+    }
 
     // Entity search with proper parameterization
     const relevantEntities = await prisma.$queryRaw(Prisma.sql`
