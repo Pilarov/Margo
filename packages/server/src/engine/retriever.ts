@@ -1,4 +1,5 @@
 import { prisma } from "../db/index.js";
+import { toVectorLiteral } from "../db/vector.js";
 import { Prisma } from "@prisma/client";
 import { embedSingle } from "./embeddings.js";
 import { compressContext } from "./compressor.js";
@@ -924,7 +925,7 @@ async function vectorSearch(
   sourceIds?: string[],
   chunkIds?: string[],
 ): Promise<RetrievalResult[]> {
-  const embeddingStr = `[${queryEmbedding.join(",")}]`;
+  const embeddingStr = toVectorLiteral(queryEmbedding);
   const metadataJson = metadataFilter ? JSON.stringify(metadataFilter) : null;
   const scopedSourceIds = uniqueStrings(sourceIds || []);
   const sourceFilterSql = scopedSourceIds.length > 0
@@ -1261,7 +1262,7 @@ async function memorySearch(
 ): Promise<RetrievalResult[]> {
   // Never fall back to project-wide personal-memory search. Callers must provide user scope.
   if (!opts.userId) return [];
-  const embeddingStr = `[${queryEmbedding.join(",")}]`;
+  const embeddingStr = toVectorLiteral(queryEmbedding);
 
   let query;
   if (opts.userId && opts.sessionId && opts.agentId) {
@@ -1341,7 +1342,7 @@ async function graphSearch(
   queryEmbedding: number[],
   opts: { depth: number; topK: number }
 ): Promise<RetrievalResult[]> {
-  const embeddingStr = `[${queryEmbedding.join(",")}]`;
+  const embeddingStr = toVectorLiteral(queryEmbedding);
 
   // Find most relevant entities using vector search
   const relevantEntities = await prisma.$queryRaw`

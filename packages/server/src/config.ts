@@ -216,3 +216,8 @@ export const consolidationMode: ConsolidationMode = (() => {
     ? (raw as ConsolidationMode)
     : "basic";
 })();
+
+// Canonical embedding dimension (ADR-006). openai (text-embedding-3-small with
+// dimensions:1024) and local (BGE-large) both emit 1024; gemini emits 768 and
+// requires a re-index when switched.
+export const EMBEDDING_DIM = num(process.env.EMBEDDING_DIM, 1024);

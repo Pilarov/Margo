@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { db } from "../../db/index.js";
+import { toVectorLiteral, dimensionCheck } from "../../db/vector.js";
 import { calibrateConfidence } from "../extraction-observability.js";
 import { mergeMemoryNormalizationMetadata } from "../../lib/memory-normalization.js";
 import { addPendingOverlayEntry } from "../pending-overlay.js";
@@ -757,7 +758,11 @@ async function enqueueEmbeddingWithRetry(
 async function embedMemoryInline(id: string, text: string): Promise<void> {
   try {
     const embedding = await embedSingle(text);
-    const embeddingStr = `[${embedding.join(",")}]`;
+    if (!dimensionCheck(embedding)) {
+      console.warn(`[MemoryWrite] Inline embedding dimension mismatch for ${id}: got length ${embedding?.length}`);
+      return;
+    }
+    const embeddingStr = toVectorLiteral(embedding);
     await db.$executeRaw(
       Prisma.sql`
         UPDATE memories

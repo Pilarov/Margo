@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "../db/index.js";
+import { toVectorLiteral } from "../db/vector.js";
 
 export type OracleSelectScope = {
   seed_hits: Array<{
@@ -61,7 +62,7 @@ export async function selectOracleScope(params: {
     return { seed_hits: [], documents: [], candidate_chunk_ids: [] };
   }
 
-  const embeddingStr = `[${queryEmbedding.join(",")}]`;
+  const embeddingStr = toVectorLiteral(queryEmbedding);
   const metadataJson = metadataFilter ? JSON.stringify(metadataFilter) : null;
   const scopedSourceIds = uniqueStrings(sourceIds || []);
   const scopedChunkTypes = uniqueStrings(chunkTypes || []);

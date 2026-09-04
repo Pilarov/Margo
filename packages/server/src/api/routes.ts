@@ -5,6 +5,7 @@ import { Prisma } from "@prisma/client";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, resolve as resolvePath } from "node:path";
 import { prisma } from "../db/index.js";
+import { embeddingToSql } from "../db/vector.js";
 import { authMiddleware, type AuthContext } from "../middleware/auth.js";
 import { rateLimitMiddleware, RateLimits } from "../middleware/rate-limit.js";
 import { retrieve } from "../engine/retriever.js";
@@ -2732,10 +2733,10 @@ api.post(
         id, content, "memoryType", "userId",
         "sessionId", "agentId", importance,
         metadata, "accessCount", "createdAt",
-        1 - (embedding <=> ${queryEmbedding}::vector) as similarity
+        1 - (embedding <=> ${embeddingToSql(queryEmbedding)}) as similarity
       FROM memories
       WHERE ${whereSql}
-      ORDER BY embedding <=> ${queryEmbedding}::vector
+      ORDER BY embedding <=> ${embeddingToSql(queryEmbedding)}
       LIMIT ${body.top_k}
     `);
 
@@ -3184,13 +3185,13 @@ api.post(
     const relevantEntities = await prisma.$queryRaw(Prisma.sql`
       SELECT
         id, name, "entityType", description, metadata,
-        1 - (embedding <=> ${queryEmbedding}::vector) as similarity
+        1 - (embedding <=> ${embeddingToSql(queryEmbedding)}) as similarity
       FROM entities
       WHERE "projectId" = ${project.id}
         ${body.entity_types && body.entity_types.length > 0 
           ? Prisma.sql`AND "entityType" IN (${Prisma.join(body.entity_types)})` 
           : Prisma.sql``}
-      ORDER BY embedding <=> ${queryEmbedding}::vector
+      ORDER BY embedding <=> ${embeddingToSql(queryEmbedding)}
       LIMIT ${body.top_k}
     `);
 
