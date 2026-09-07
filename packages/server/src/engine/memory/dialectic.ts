@@ -122,21 +122,27 @@ export async function dialecticQuery(params: {
   const userPrompt = `User memories:\n${memoryBlock}\n\nQuestion: ${params.query}`;
 
   let answer = "";
-  try {
-    const model = getModel();
-    const response = await getOpenAIClient().chat.completions.create({
-      model,
-      ...getMaxOutputTokensParam(model, maxTokens),
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ],
-      temperature: 0.2,
-    });
-    answer = response.choices[0]?.message?.content?.trim() ?? "";
-  } catch (err: any) {
-    console.error("[dialectic] LLM call failed:", err?.message || err);
-    throw err;
+  const maxAttempts = 3;
+  for (let attempt = 0; attempt < maxAttempts && !answer; attempt++) {
+    try {
+      const model = getModel();
+      const response = await getOpenAIClient().chat.completions.create({
+        model,
+        ...getMaxOutputTokensParam(model, maxTokens),
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+        temperature: 0.2,
+      });
+      answer = response.choices[0]?.message?.content?.trim() ?? "";
+      if (!answer && attempt < maxAttempts - 1) {
+        console.warn(`[dialectic] empty answer on attempt ${attempt + 1}, retrying`);
+      }
+    } catch (err: any) {
+      console.error("[dialectic] LLM call failed:", err?.message || err);
+      throw err;
+    }
   }
 
   // Best-effort: find memory IDs whose content appears in the answer

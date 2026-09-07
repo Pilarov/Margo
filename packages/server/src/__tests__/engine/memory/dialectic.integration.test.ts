@@ -86,6 +86,21 @@ describe("dialecticQuery", () => {
     await expect(dialecticQuery({ userId: "u1", projectId: "p1", query: "q" })).rejects.toThrow("llm down");
   });
 
+  it("retries when the model returns an empty answer", async () => {
+    mockLoadMemories.mockResolvedValue([
+      { id: "m1", content: "User prefers dark mode", memoryType: "preference", importance: 0.9, updatedAt: new Date() },
+    ]);
+    mockSynthModel.mockResolvedValue({ evidence: { coverage_score: 0.5 } });
+    mockChatCreate
+      .mockResolvedValueOnce({ choices: [{ message: { content: "" } }] })
+      .mockResolvedValueOnce({ choices: [{ message: { content: "User prefers dark mode." } }] });
+
+    const result = await dialecticQuery({ userId: "u1", projectId: "p1", query: "dark mode?" });
+
+    expect(mockChatCreate).toHaveBeenCalledTimes(2);
+    expect(result.answer).toBe("User prefers dark mode.");
+  });
+
   it("prefers semantically relevant memories over high-importance ones", async () => {
     mockLoadMemories.mockResolvedValue([
       { id: "important", content: "Works at Stripe", memoryType: "factual", importance: 0.9, updatedAt: new Date() },

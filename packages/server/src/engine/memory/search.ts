@@ -40,13 +40,20 @@ interface TimingLog {
 interface QueryIntent {
   wantsRecent: boolean;
   asksForSearchHistory: boolean;
+  asksForGoals: boolean;
+  asksForPreferences: boolean;
+  asksForDecisions: boolean;
 }
 
-function detectQueryIntent(query: string): QueryIntent {
+export function detectQueryIntent(query: string): QueryIntent {
   const normalized = query.toLowerCase();
-  const wantsRecent = /\b(last|latest|recent|recently|previous|before|earlier)\b/.test(normalized);
-  const asksForSearchHistory = /\b(search|searched|query|queried|asked|question|chat|conversation|llm|ai)\b/.test(normalized);
-  return { wantsRecent, asksForSearchHistory };
+  return {
+    wantsRecent: /\b(last|latest|recent|recently|previous|before|earlier)\b/.test(normalized),
+    asksForSearchHistory: /\b(search|searched|query|queried|asked|question|chat|conversation|llm|ai)\b/.test(normalized),
+    asksForGoals: /\b(goal|goals|objective|objectives|target|targets|aim|milestone)\b/.test(normalized),
+    asksForPreferences: /\b(prefer|prefers|preference|preferences|like|likes|style|format)\b/.test(normalized),
+    asksForDecisions: /\b(decide|decision|decisions|chose|chosen|standard|standardized|stack|architecture|backend)\b/.test(normalized),
+  };
 }
 
 function parseDateSafe(value: unknown): Date | null {
@@ -66,7 +73,7 @@ function getMemoryRecencyDate(memory: any): Date | null {
 }
 
 function rerankByIntent(memories: any[], questionDate: Date | undefined, intent: QueryIntent): any[] {
-  if (!intent.wantsRecent && !intent.asksForSearchHistory) {
+  if (!intent.wantsRecent && !intent.asksForSearchHistory && !intent.asksForGoals && !intent.asksForPreferences && !intent.asksForDecisions) {
     return memories;
   }
 
@@ -87,6 +94,9 @@ function rerankByIntent(memories: any[], questionDate: Date | undefined, intent:
       if (memory.memoryType === "event") typeBoost += 0.35;
       if (eventKeyword.test(memory.content || "")) typeBoost += 0.2;
     }
+    if (intent.asksForGoals && memory.memoryType === "goal") typeBoost += 0.4;
+    if (intent.asksForPreferences && memory.memoryType === "preference") typeBoost += 0.4;
+    if (intent.asksForDecisions && (memory.memoryType === "decision" || memory.memoryType === "constraint")) typeBoost += 0.4;
 
     const finalIntentScore =
       similarityScore * 0.65 +
@@ -302,6 +312,38 @@ export async function searchMemories(
   timings.push({ step: "vector_search", duration: Date.now() - vectorStart });
   const scopedSemanticResults = rerankByScope(semanticResults, { userId, sessionId, agentId, taskId });
 
+  // Type-aware recall boost: when the query asks for a specific memory type, also
+  // pull that type directly so semantic gaps (e.g. "goals" vs "Reduce p99 latency")
+  // don't drop on-type memories that are far from the query embedding.
+  const typeRecallTypes = queryIntent.asksForGoals
+    ? ["goal"]
+    : queryIntent.asksForPreferences
+      ? ["preference"]
+      : queryIntent.asksForDecisions
+        ? ["decision", "constraint"]
+        : null;
+  if (typeRecallTypes && userId) {
+    const typeMemories = await db.memory.findMany({
+      where: {
+        projectId,
+        userId,
+        orgId,
+        scope: { in: applicableScopes },
+        isActive: true,
+        memoryType: { in: typeRecallTypes },
+        OR: [{ validUntil: null }, { validUntil: { gt: new Date() } }],
+      },
+      orderBy: { importance: "desc" },
+      take: topK,
+    });
+    const seen = new Set(scopedSemanticResults.map((m) => m.id));
+    for (const tm of typeMemories) {
+      if (!seen.has(tm.id)) {
+        scopedSemanticResults.push({ ...tm, similarity: 0.8 });
+      }
+    }
+  }
+
   // Guardrail: if we're already over budget after vector search, degrade to fast mode.
   if (!disableLatencyDegradation && !effectiveFastMode && Date.now() - startTotal > POST_VECTOR_BUDGET_MS) {
     effectiveFastMode = true;
@@ -336,6 +378,7 @@ export async function searchMemories(
 
   // Step 4: FAST MODE - Skip graph traversal and temporal scoring for speed
   let finalResults = scopedSemanticResults.slice(0, topK);
+  let candidatePool: any[] = scopedSemanticResults;
   
   if (!effectiveFastMode) {
     // Graph traversal - enrich with related memories
@@ -366,14 +409,22 @@ export async function searchMemories(
     combined.sort((a, b) => (b.finalScore ?? 0) - (a.finalScore ?? 0));
     timings.push({ step: "sort", duration: Date.now() - sortStart });
 
+    candidatePool = combined;
     // Take top K
     finalResults = combined.slice(0, topK);
   }
 
-  // Step 4b: Intent-aware reranking for "last/recent search" style queries.
-  if (queryIntent.wantsRecent || queryIntent.asksForSearchHistory) {
+  // Step 4b: Intent-aware reranking over the full candidate pool (so type boosts
+  // can surface on-type memories that ranked low semantically).
+  if (
+    queryIntent.wantsRecent ||
+    queryIntent.asksForSearchHistory ||
+    queryIntent.asksForGoals ||
+    queryIntent.asksForPreferences ||
+    queryIntent.asksForDecisions
+  ) {
     const intentStart = Date.now();
-    finalResults = rerankByIntent(finalResults, questionDate, queryIntent).slice(0, topK);
+    finalResults = rerankByIntent(candidatePool, questionDate, queryIntent).slice(0, topK);
     timings.push({ step: "intent_rerank", duration: Date.now() - intentStart });
   }
 
