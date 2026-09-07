@@ -1,8 +1,13 @@
 # ADR-003: Dreamer-style memory consolidation
 
-**Status**: Proposed
+**Status**: Accepted
 **Date**: 2026-07-20
 **Deciders**: opencode + dspilarov
+
+## Falsification Criteria
+
+- `CONSOLIDATION_MODE=dreamer` создаёт derived-memory из повторяющихся паттернов (проверяемо `dreamer.integration.test.ts`).
+- `CONSOLIDATION_MODE=basic` = текущее поведение dedup+decay (регресс-тест).
 
 ## Context
 

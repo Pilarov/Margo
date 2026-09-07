@@ -1,8 +1,13 @@
 # ADR-002: One-pass memory extraction
 
-**Status**: Proposed
+**Status**: Accepted
 **Date**: 2026-07-20
 **Deciders**: opencode + dspilarov
+
+## Falsification Criteria
+
+- `EXTRACTION_MODE=one_pass` делает ровно **1** LLM-вызов на сообщение (проверяемо `extractor-onepass.test.ts`).
+- `EXTRACTION_MODE=per_type` (дефолт) даёт те же результаты, что до изменений (регресс-тест).
 
 ## Context
 

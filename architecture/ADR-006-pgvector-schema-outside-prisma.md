@@ -1,8 +1,13 @@
 # ADR-006: Векторная схема вне Prisma DSL — кастомный слой pgvector (тип + индексы + хелпер)
 
-**Status**: Proposed
+**Status**: Accepted
 **Date**: 2026-08-31
 **Deciders**: opencode + dspilarov
+
+## Falsification Criteria
+
+- `prisma/scripts/pgvector.sql` идемпотентен (повторный запуск → `already exists, skipping`).
+- `dimensionCheck` отсекает вектор неверной размерности перед записью и поиском (проверяемо `db/vector.test.ts` + smoke).
 
 ## Context
 
