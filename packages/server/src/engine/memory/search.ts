@@ -43,6 +43,9 @@ interface QueryIntent {
   asksForGoals: boolean;
   asksForPreferences: boolean;
   asksForDecisions: boolean;
+  asksForInstructions: boolean;
+  asksForSolutions: boolean;
+  asksForWorkflows: boolean;
 }
 
 export function detectQueryIntent(query: string): QueryIntent {
@@ -51,8 +54,11 @@ export function detectQueryIntent(query: string): QueryIntent {
     wantsRecent: /\b(last|latest|recent|recently|previous|before|earlier)\b/.test(normalized),
     asksForSearchHistory: /\b(search|searched|query|queried|asked|question|chat|conversation|llm|ai)\b/.test(normalized),
     asksForGoals: /\b(goal|goals|objective|objectives|target|targets|aim|milestone)\b/.test(normalized),
-    asksForPreferences: /\b(prefer|prefers|preference|preferences|like|likes|style|format)\b/.test(normalized),
+    asksForPreferences: /\b(prefer\w*|preference\w*|like\w*|style|format)\b/.test(normalized),
     asksForDecisions: /\b(decide|decision|decisions|chose|chosen|standard|standardized|stack|architecture|backend)\b/.test(normalized),
+    asksForInstructions: /\b(how|required|require|must|always|should|rotate|document\w*|practice\w*|rule\w*|procedure\w*)\b/.test(normalized),
+    asksForSolutions: /\b(resolved|resolve|fixed|fix|outage|incident|issue|solution\w*)\b/.test(normalized),
+    asksForWorkflows: /\b(pipeline|strategy|cadence|release|workflow\w*|process\w*)\b/.test(normalized),
   };
 }
 
@@ -73,7 +79,16 @@ function getMemoryRecencyDate(memory: any): Date | null {
 }
 
 function rerankByIntent(memories: any[], questionDate: Date | undefined, intent: QueryIntent): any[] {
-  if (!intent.wantsRecent && !intent.asksForSearchHistory && !intent.asksForGoals && !intent.asksForPreferences && !intent.asksForDecisions) {
+  if (
+    !intent.wantsRecent &&
+    !intent.asksForSearchHistory &&
+    !intent.asksForGoals &&
+    !intent.asksForPreferences &&
+    !intent.asksForDecisions &&
+    !intent.asksForInstructions &&
+    !intent.asksForSolutions &&
+    !intent.asksForWorkflows
+  ) {
     return memories;
   }
 
@@ -97,6 +112,9 @@ function rerankByIntent(memories: any[], questionDate: Date | undefined, intent:
     if (intent.asksForGoals && memory.memoryType === "goal") typeBoost += 0.4;
     if (intent.asksForPreferences && memory.memoryType === "preference") typeBoost += 0.4;
     if (intent.asksForDecisions && (memory.memoryType === "decision" || memory.memoryType === "constraint")) typeBoost += 0.4;
+    if (intent.asksForInstructions && memory.memoryType === "instruction") typeBoost += 0.4;
+    if (intent.asksForSolutions && memory.memoryType === "solution") typeBoost += 0.4;
+    if (intent.asksForWorkflows && memory.memoryType === "workflow") typeBoost += 0.4;
 
     const finalIntentScore =
       similarityScore * 0.65 +
@@ -321,7 +339,13 @@ export async function searchMemories(
       ? ["preference"]
       : queryIntent.asksForDecisions
         ? ["decision", "constraint"]
-        : null;
+        : queryIntent.asksForInstructions
+          ? ["instruction"]
+          : queryIntent.asksForSolutions
+            ? ["solution"]
+            : queryIntent.asksForWorkflows
+              ? ["workflow"]
+              : null;
   if (typeRecallTypes && userId) {
     const typeMemories = await db.memory.findMany({
       where: {
@@ -338,9 +362,29 @@ export async function searchMemories(
     });
     const seen = new Set(scopedSemanticResults.map((m) => m.id));
     for (const tm of typeMemories) {
-      if (!seen.has(tm.id)) {
-        scopedSemanticResults.push({ ...tm, similarity: 0.8 });
-      }
+      if (seen.has(tm.id)) continue;
+      scopedSemanticResults.push({
+        id: tm.id,
+        content: tm.content,
+        memoryType: tm.memoryType,
+        entityMentions: tm.entityMentions || [],
+        confidence: tm.confidence,
+        version: tm.version,
+        scope: tm.scope,
+        userId: tm.userId ?? null,
+        sessionId: tm.sessionId ?? null,
+        agentId: tm.agentId ?? null,
+        taskId: tm.taskId ?? null,
+        documentDate: tm.documentDate,
+        eventDate: tm.eventDate,
+        validFrom: tm.validFrom,
+        validUntil: tm.validUntil,
+        createdAt: tm.createdAt,
+        updatedAt: tm.updatedAt,
+        sourceChunkId: tm.sourceChunkId,
+        metadata: tm.metadata,
+        similarity: 0.8,
+      });
     }
   }
 
@@ -363,12 +407,12 @@ export async function searchMemories(
   // Step 3: Early exit if top result is excellent
   if (!queryIntent.wantsRecent && scopedSemanticResults.length > 0 && scopedSemanticResults[0].similarity >= EARLY_EXIT_SIMILARITY) {
     console.log(`⚡ Early exit at ${scopedSemanticResults[0].similarity.toFixed(3)}`);
-    const topMemories = scopedSemanticResults.slice(0, topK);
-    
+    const topMemories = await injectSourceChunks(scopedSemanticResults.slice(0, topK));
+
     // Cache good results
     await setInSemanticCache(queryEmbedding, topMemories, 300);
     await setInCache(cacheKey, topMemories, 300); // 5 min cache
-    
+
     const total = Date.now() - startTotal;
     timings.push({ step: "TOTAL", duration: total });
     logTimings(timings, query);
@@ -421,7 +465,10 @@ export async function searchMemories(
     queryIntent.asksForSearchHistory ||
     queryIntent.asksForGoals ||
     queryIntent.asksForPreferences ||
-    queryIntent.asksForDecisions
+    queryIntent.asksForDecisions ||
+    queryIntent.asksForInstructions ||
+    queryIntent.asksForSolutions ||
+    queryIntent.asksForWorkflows
   ) {
     const intentStart = Date.now();
     finalResults = rerankByIntent(candidatePool, questionDate, queryIntent).slice(0, topK);

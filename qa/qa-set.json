@@ -63,6 +63,90 @@
       "answer": "Beta",
       "reference_slugs": ["state-beta"],
       "anchors": ["beta"]
+    },
+    {
+      "id": "q-no-secrets",
+      "question": "Are there constraints on what must not be logged?",
+      "answer": "Never log secrets or credentials",
+      "reference_slugs": ["no-secrets-in-logs"],
+      "anchors": ["secret", "log"]
+    },
+    {
+      "id": "q-key-rotation",
+      "question": "How often are API keys rotated?",
+      "answer": "Every month",
+      "reference_slugs": ["rotate-keys-monthly"],
+      "anchors": ["month"]
+    },
+    {
+      "id": "q-test-framework",
+      "question": "What testing framework is standard for the project?",
+      "answer": "Jest",
+      "reference_slugs": ["jest-unit-tests"],
+      "anchors": ["Jest"]
+    },
+    {
+      "id": "q-coverage",
+      "question": "What test coverage is required?",
+      "answer": "80 percent",
+      "reference_slugs": ["coverage-80"],
+      "anchors": ["80"]
+    },
+    {
+      "id": "q-tdd",
+      "question": "Is test-driven development preferred?",
+      "answer": "Yes, test-driven development",
+      "reference_slugs": ["tdd-approach"],
+      "anchors": ["test"]
+    },
+    {
+      "id": "q-docs",
+      "question": "What documentation is required for a repository?",
+      "answer": "A README and API documentation",
+      "reference_slugs": ["readme-required", "document-apis"],
+      "anchors": ["README", "document"]
+    },
+    {
+      "id": "q-deploy-timing",
+      "question": "Are there constraints on when production deploys are allowed?",
+      "answer": "No weekends, only Fridays",
+      "reference_slugs": ["no-weekend-deploys", "deploy-fridays"],
+      "anchors": ["weekend", "Friday"]
+    },
+    {
+      "id": "q-deploy-strategy",
+      "question": "What deployment strategy is used?",
+      "answer": "Blue-green deployment",
+      "reference_slugs": ["blue-green-deploy"],
+      "anchors": ["blue-green"]
+    },
+    {
+      "id": "q-outage",
+      "question": "How was the billing outage resolved?",
+      "answer": "With a circuit breaker",
+      "reference_slugs": ["outage-fix"],
+      "anchors": ["circuit breaker"]
+    },
+    {
+      "id": "q-payments",
+      "question": "What payment provider is used?",
+      "answer": "Stripe",
+      "reference_slugs": ["stripe-api"],
+      "anchors": ["Stripe"]
+    },
+    {
+      "id": "q-email",
+      "question": "What is used for transactional email?",
+      "answer": "SendGrid",
+      "reference_slugs": ["sendgrid-email"],
+      "anchors": ["SendGrid"]
+    },
+    {
+      "id": "q-bundle-goal",
+      "question": "What is the frontend bundle size goal?",
+      "answer": "Under 100 kilobytes",
+      "reference_slugs": ["bundle-size-goal"],
+      "anchors": ["100"]
     }
   ]
 }

@@ -60,6 +60,35 @@ MEMORIES = [
     ("state-migration-blocker", "Main blocker is the database migration", "project_state", 0.6, []),
     ("solution-memleak", "Resolved the memory leak with a connection pool", "solution", 0.6, []),
     ("correction-wed-fri", "Previously deployed on Wednesdays, now on Fridays", "correction", 0.5, []),
+
+    # ── Security / operations ───────────────────────────────────────────────
+    ("no-secrets-in-logs", "Never log secrets or credentials", "constraint", 0.75, []),
+    ("rotate-keys-monthly", "Rotate API keys every month", "instruction", 0.6, []),
+    ("no-weekend-deploys", "No production deploys on weekends", "constraint", 0.7, []),
+    ("blue-green-deploy", "Uses blue-green deployment strategy", "decision", 0.65, []),
+    ("outage-fix", "Resolved the billing outage with a circuit breaker", "solution", 0.6, []),
+    ("redis-cache", "Uses Redis for caching hot data", "factual", 0.65, ["Redis"]),
+
+    # ── Testing / documentation ─────────────────────────────────────────────
+    ("jest-unit-tests", "Standardized on Jest for unit tests", "decision", 0.7, ["Jest"]),
+    ("coverage-80", "Requires 80 percent test coverage", "constraint", 0.65, []),
+    ("tdd-approach", "Prefers test-driven development", "preference", 0.5, []),
+    ("readme-required", "Every repository must have a README", "instruction", 0.6, []),
+    ("document-apis", "Document public APIs with examples", "instruction", 0.6, []),
+
+    # ── Integrations ────────────────────────────────────────────────────────
+    ("stripe-api", "Payment processing uses the Stripe API", "factual", 0.7, ["Stripe"]),
+    ("sendgrid-email", "Transactional email uses SendGrid", "factual", 0.6, ["SendGrid"]),
+
+    # ── More preferences / workflows / corrections ──────────────────────────
+    ("async-first", "Prefers asynchronous communication over meetings", "preference", 0.4, []),
+    ("standup-daily", "Daily standup happens at 9am", "workflow", 0.5, []),
+    ("pr-small", "Prefers pull requests under 300 lines", "preference", 0.45, []),
+    ("node-to-go", "Previously used Node.js for services, now Go", "correction", 0.5, ["Node.js", "Go"]),
+    ("goal-multi-region", "Goal: deploy to multiple regions by end of year", "goal", 0.65, []),
+    ("state-production", "The billing service is in production", "project_state", 0.6, []),
+    ("state-migrating-auth", "Currently migrating the auth service", "project_state", 0.55, []),
+    ("bundle-size-goal", "Goal: keep the frontend bundle under 100 kilobytes", "goal", 0.6, []),
 ]
 
 slug_to_id = {}
