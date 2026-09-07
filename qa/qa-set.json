@@ -1,0 +1,68 @@
+{
+  "user": "working-memory-test-user",
+  "items": [
+    {
+      "id": "q-format",
+      "question": "How should the assistant format its answers?",
+      "answer": "Concise bullet points, no emojis, code snippets over prose",
+      "reference_slugs": ["concise-answers", "no-emojis", "code-snippets"],
+      "anchors": ["bullet", "emoji", "snippet"]
+    },
+    {
+      "id": "q-deploy-process",
+      "question": "What is the deployment process?",
+      "answer": "Deploy to production only on Fridays, using semantic versioning",
+      "reference_slugs": ["deploy-fridays", "semver"],
+      "anchors": ["Friday", "version"]
+    },
+    {
+      "id": "q-backend",
+      "question": "What does the backend use?",
+      "answer": "Go with gRPC, backed by PostgreSQL",
+      "reference_slugs": ["go-backend", "grpc-comms", "postgres-pgvector"],
+      "anchors": ["Go", "gRPC", "PostgreSQL"]
+    },
+    {
+      "id": "q-deploy-constraint",
+      "question": "Are there constraints on where deployment must run?",
+      "answer": "Deployment must stay on AWS",
+      "reference_slugs": ["aws-only"],
+      "anchors": ["AWS"]
+    },
+    {
+      "id": "q-goals",
+      "question": "What are the current project goals?",
+      "answer": "Migrate the monolith to microservices and reduce p99 latency below 100ms",
+      "reference_slugs": ["goal-microservices", "goal-latency"],
+      "anchors": ["microservice", "latency"]
+    },
+    {
+      "id": "q-package-manager",
+      "question": "Which package manager is standard for the project?",
+      "answer": "pnpm",
+      "reference_slugs": ["pnpm-monorepo", "pnpm-over-npm"],
+      "anchors": ["pnpm"]
+    },
+    {
+      "id": "q-deploy-day",
+      "question": "When are production deploys allowed?",
+      "answer": "Only on Fridays",
+      "reference_slugs": ["deploy-fridays"],
+      "anchors": ["Friday"]
+    },
+    {
+      "id": "q-merge-practices",
+      "question": "What practices are required before merging code?",
+      "answer": "Run tests, get code review, add a changelog entry",
+      "reference_slugs": ["tests-before-push", "review-before-merge", "changelog-entry"],
+      "anchors": ["test", "review", "changelog"]
+    },
+    {
+      "id": "q-release-phase",
+      "question": "What is the current release phase of the project?",
+      "answer": "Beta",
+      "reference_slugs": ["state-beta"],
+      "anchors": ["beta"]
+    }
+  ]
+}

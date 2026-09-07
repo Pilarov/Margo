@@ -11,3 +11,4 @@ Thumbs.db
 packages/server/data/
 coverage/
 reviews/
+qa/memory_map.json

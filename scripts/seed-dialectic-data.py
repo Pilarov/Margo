@@ -1,84 +1,91 @@
 #!/usr/bin/env python3
-"""Seed a realistic memory set for testing dialectic semantic selection.
+"""Seed Margo with *working* memories (памятивы) — NOT user facts.
 
-Creates a single user (`dialectic-test-user`) with two thematic clusters:
-  - work/infra (HIGH importance, 0.6-0.85): backend/Go/k8s/CI
-  - preferences/style (LOW importance, 0.25-0.6): editor theme, fonts, habits
+Margo stores durable working memory about the project/work: decisions, constraints,
+goals, procedures, corrections, and answer-style preferences. User identity,
+relationships, biography and dialogues live in other services.
 
-The point: queries about preferences must surface LOW-importance memories, which
-`importance + recency` selection fails at and semantic `<=>` selection solves.
+Each memory has a stable `slug` used to cross-reference the QA eval set. The
+seed writes `qa/memory_map.json` mapping slug -> memory_id so eval scripts can
+resolve ground-truth references.
 
 Usage:
-    RETAINDB_BASE_URL=http://localhost:3000 RETAINDB_API_KEY=margo-test-key python3 scripts/seed-dialectic-data.py
+    RETAINDB_BASE_URL=http://localhost:3000 RETAINDB_API_KEY=margo-test-key \
+      python3 scripts/seed-dialectic-data.py
 """
+import json
 import os
 import requests
 
 BASE = os.environ.get("RETAINDB_BASE_URL", "http://localhost:3000").rstrip("/")
 KEY = os.environ.get("RETAINDB_API_KEY", "margo-test-key")
-USER = "dialectic-test-user"
+USER = os.environ.get("RETAINDB_USER", "dialectic-test-user")
+MAP_PATH = os.path.join(os.path.dirname(__file__), "..", "qa", "memory_map.json")
 H = {"Authorization": f"Bearer {KEY}", "Content-Type": "application/json"}
 
+# (slug, content, memory_type, importance, entity_mentions)
 MEMORIES = [
-    # ── Cluster A: work / infrastructure (HIGH importance) ─────────────────
-    ("Works as a backend engineer at Stripe", "factual", 0.85),
-    ("Primary backend language is Go", "factual", 0.8),
-    ("Services communicate over gRPC", "factual", 0.75),
-    ("Uses PostgreSQL with pgvector for embeddings", "factual", 0.7),
-    ("Deploys to Kubernetes on AWS EKS", "factual", 0.8),
-    ("CI/CD pipeline runs on GitHub Actions", "factual", 0.7),
-    ("Monorepo is managed with pnpm workspaces", "factual", 0.75),
-    ("Observability stack is Prometheus and Grafana", "factual", 0.7),
-    ("Infrastructure is defined with Terraform", "factual", 0.75),
-    ("Service mesh is Istio", "factual", 0.65),
-    ("API rate limit is 1000 requests per minute", "constraint", 0.8),
-    ("On-call rotation is weekly", "factual", 0.6),
-    ("Code review is required before merge", "instruction", 0.8),
-    ("Feature flags are managed with LaunchDarkly", "factual", 0.7),
-    ("Secrets are stored in AWS Secrets Manager", "factual", 0.65),
-    # ── Cluster B: preferences / style (LOW importance) ────────────────────
-    ("Prefers dark theme in the code editor", "preference", 0.35),
-    ("Likes monospace fonts, especially JetBrains Mono", "preference", 0.4),
-    ("Prefers concise bullet-point answers", "preference", 0.3),
-    ("Dislikes emojis in technical output", "preference", 0.35),
-    ("Prefers pnpm over npm", "preference", 0.45),
-    ("Prefers a maximum line length of 80 characters", "preference", 0.4),
-    ("Prefers tabs over spaces for indentation", "preference", 0.5),
-    ("Enjoys morning coffee before starting work", "preference", 0.25),
-    ("Prefers Vim keybindings in the editor", "preference", 0.4),
-    ("Likes small focused git commits", "preference", 0.45),
-    ("Prefers TypeScript over plain JavaScript", "preference", 0.6),
-    ("Dislikes long meetings", "preference", 0.4),
-    ("Prefers async communication over meetings", "preference", 0.45),
-    ("Likes writing tests before implementation", "preference", 0.5),
-    ("Prefers dark mode everywhere including the terminal", "preference", 0.35),
-    ("Likes the Dracula color scheme", "preference", 0.3),
-    # ── Goals / events (mixed importance) ──────────────────────────────────
-    ("Goal: migrate the monolith to microservices by Q3", "goal", 0.8),
-    ("Goal: reduce p99 latency below 100 milliseconds", "goal", 0.7),
-    ("Attended KubeCon in 2025", "event", 0.5),
-    ("Shipped the new billing API in March", "event", 0.6),
-    ("Planning to adopt Rust for performance-critical services", "goal", 0.6),
-    ("Migrated the frontend from JavaScript to TypeScript", "event", 0.55),
-    ("Uses a standing desk to reduce back pain", "preference", 0.3),
-    ("Prefers error messages with code snippets", "preference", 0.4),
-    ("Likes when APIs return typed schemas", "preference", 0.45),
-    ("Dislikes abbreviations in documentation", "preference", 0.35),
+    # ── Cluster A: architecture / decisions / constraints (HIGH importance) ──
+    ("go-backend", "Standardized the backend on Go", "decision", 0.8, ["Go"]),
+    ("grpc-comms", "Chose gRPC for service-to-service communication", "decision", 0.75, ["gRPC"]),
+    ("pnpm-monorepo", "Monorepo is managed with pnpm workspaces", "factual", 0.7, ["pnpm"]),
+    ("postgres-pgvector", "Primary datastore is PostgreSQL with pgvector", "factual", 0.7, ["PostgreSQL", "pgvector"]),
+    ("aws-only", "Deployment must stay on AWS", "constraint", 0.8, ["AWS"]),
+    ("prom-grafana", "Observability stack is Prometheus and Grafana", "factual", 0.7, ["Prometheus", "Grafana"]),
+    ("terraform-infra", "Infrastructure is defined with Terraform", "decision", 0.75, ["Terraform"]),
+    ("gh-actions", "CI/CD runs on GitHub Actions", "factual", 0.7, ["GitHub Actions"]),
+    ("rate-limit", "API rate limit is 1000 requests per minute", "constraint", 0.8, []),
+    ("secrets-manager", "Secrets are stored in AWS Secrets Manager", "factual", 0.65, ["AWS"]),
+    ("review-before-merge", "Code review is required before merge", "instruction", 0.8, []),
+    ("launchdarkly", "Feature flags are managed with LaunchDarkly", "decision", 0.7, ["LaunchDarkly"]),
+
+    # ── Cluster B: how to work / how to answer (LOW importance) ──────────────
+    ("concise-answers", "Prefers concise bullet-point answers", "preference", 0.3, []),
+    ("no-emojis", "No emojis in technical output", "preference", 0.35, []),
+    ("code-snippets", "Likes code snippets over prose explanations", "preference", 0.4, []),
+    ("line-length-80", "Prefers a maximum line length of 80 characters", "preference", 0.4, []),
+    ("error-examples", "Prefers error messages to include code examples", "preference", 0.4, []),
+    ("tests-before-push", "Always run tests before pushing", "instruction", 0.5, []),
+    ("changelog-entry", "Add a changelog entry with every merge", "instruction", 0.45, []),
+    ("deploy-fridays", "Deploy to production only on Fridays", "workflow", 0.45, []),
+    ("semver", "Release process uses semantic versioning", "workflow", 0.5, []),
+    ("pnpm-over-npm", "Previously used npm, now standardized on pnpm", "correction", 0.45, ["pnpm"]),
+    ("typed-schemas", "Prefers typed schemas in API responses", "preference", 0.45, []),
+    ("no-abbreviations", "Avoids abbreviations in documentation", "preference", 0.35, []),
+
+    # ── Goals / project state / solutions (mixed importance) ─────────────────
+    ("goal-microservices", "Migrate the monolith to microservices by Q3", "goal", 0.8, []),
+    ("goal-latency", "Reduce p99 latency below 100 milliseconds", "goal", 0.7, []),
+    ("state-beta", "Currently in beta phase", "project_state", 0.6, []),
+    ("state-migration-blocker", "Main blocker is the database migration", "project_state", 0.6, []),
+    ("solution-memleak", "Resolved the memory leak with a connection pool", "solution", 0.6, []),
+    ("correction-wed-fri", "Previously deployed on Wednesdays, now on Fridays", "correction", 0.5, []),
 ]
 
+slug_to_id = {}
 count = 0
-for content, memory_type, importance in MEMORIES:
+for slug, content, memory_type, importance, entities in MEMORIES:
     r = requests.post(BASE + "/v1/memory", headers=H, json={
         "project": "default",
         "content": content,
         "memory_type": memory_type,
         "user_id": USER,
         "importance": importance,
+        "entity_mentions": entities,
         "write_mode": "sync",
     }, timeout=60)
     if r.status_code in (200, 201):
-        count += 1
+        body = r.json()
+        mid = (body.get("memory") or {}).get("id") or body.get("memory_id")
+        if mid:
+            slug_to_id[slug] = mid
+            count += 1
     else:
-        print(f"FAIL {memory_type}: {content[:40]} -> {r.status_code} {r.text[:120]}")
+        print(f"FAIL {slug}: {r.status_code} {r.text[:120]}")
 
-print(f"\nSeeded {count}/{len(MEMORIES)} memories for {USER}")
+os.makedirs(os.path.dirname(MAP_PATH), exist_ok=True)
+with open(MAP_PATH, "w") as f:
+    json.dump({"user": USER, "slugs": slug_to_id}, f, indent=2)
+
+print(f"\nSeeded {count}/{len(MEMORIES)} working memories for {USER}")
+print(f"Memory map written to {MAP_PATH}")
