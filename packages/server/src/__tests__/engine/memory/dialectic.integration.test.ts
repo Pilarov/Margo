@@ -1,14 +1,19 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { mockChatCreate, mockLoadMemories, mockSynthModel } = vi.hoisted(() => ({
+const { mockChatCreate, mockLoadMemories, mockSynthModel, mockSearchMemories } = vi.hoisted(() => ({
   mockChatCreate: vi.fn(),
   mockLoadMemories: vi.fn(),
   mockSynthModel: vi.fn(),
+  mockSearchMemories: vi.fn(),
 }));
 
 vi.mock("../../../engine/memory/user-model.js", () => ({
   loadUserModelMemories: mockLoadMemories,
   synthesizeUserModel: mockSynthModel,
+}));
+
+vi.mock("../../../engine/memory/search.js", () => ({
+  searchMemories: mockSearchMemories,
 }));
 
 vi.mock("../../../engine/llm-client.js", () => ({
@@ -26,6 +31,8 @@ describe("dialecticQuery", () => {
     mockChatCreate.mockReset();
     mockLoadMemories.mockReset();
     mockSynthModel.mockReset();
+    mockSearchMemories.mockReset();
+    mockSearchMemories.mockResolvedValue([]);
   });
 
   it("returns the no-memories answer without calling the LLM", async () => {
@@ -77,5 +84,23 @@ describe("dialecticQuery", () => {
     mockChatCreate.mockRejectedValue(new Error("llm down"));
 
     await expect(dialecticQuery({ userId: "u1", projectId: "p1", query: "q" })).rejects.toThrow("llm down");
+  });
+
+  it("prefers semantically relevant memories over high-importance ones", async () => {
+    mockLoadMemories.mockResolvedValue([
+      { id: "important", content: "Works at Stripe", memoryType: "factual", importance: 0.9, updatedAt: new Date() },
+    ]);
+    mockSynthModel.mockResolvedValue({ evidence: { coverage_score: 0.5 } });
+    mockSearchMemories.mockResolvedValue([
+      { memory: { id: "font1", content: "Prefers JetBrains Mono", memoryType: "preference" }, similarity: 0.9 },
+    ]);
+    mockChatCreate.mockResolvedValue({ choices: [{ message: { content: "The user prefers JetBrains Mono." } }] });
+
+    const result = await dialecticQuery({ userId: "u1", projectId: "p1", query: "editor font?" });
+
+    const userPrompt = mockChatCreate.mock.calls[0][0].messages.find((m: any) => m.role === "user").content;
+    expect(userPrompt).toContain("JetBrains Mono");
+    expect(userPrompt).not.toContain("Works at Stripe");
+    expect(result.answer).toBe("The user prefers JetBrains Mono.");
   });
 });

@@ -6,6 +6,7 @@
  */
 
 import { loadUserModelMemories, synthesizeUserModel } from "./user-model.js";
+import { searchMemories } from "./search.js";
 import { getLLMClient } from "../llm-client.js";
 import { llm as llmCfg } from "../../config.js";
 
@@ -89,7 +90,33 @@ export async function dialecticQuery(params: {
     };
   }
 
-  const memoryBlock = buildMemoryBlock(memories, maxMemories);
+  // Semantic selection: retrieve memories relevant to the query, so low-importance
+  // but on-topic memories surface. Falls back to importance-sorted memories when
+  // vector search is unavailable or returns nothing.
+  let selected: Array<{ id: string; content: string; memoryType: string; importance: number; updatedAt: Date }> = memories;
+  try {
+    const relevant = await searchMemories({
+      query: params.query,
+      questionDate: new Date(),
+      userId: params.userId,
+      projectId: params.projectId,
+      scopes: ["USER"],
+      topK: maxMemories,
+    });
+    if (relevant.length > 0) {
+      selected = relevant.map((r) => ({
+        id: r.memory.id,
+        content: r.memory.content,
+        memoryType: r.memory.memoryType,
+        importance: r.similarity,
+        updatedAt: new Date(),
+      }));
+    }
+  } catch (error: any) {
+    console.warn("[dialectic] semantic selection failed, falling back to importance:", error?.message || error);
+  }
+
+  const memoryBlock = buildMemoryBlock(selected, maxMemories);
   const systemPrompt = buildSystemPrompt(level);
 
   const userPrompt = `User memories:\n${memoryBlock}\n\nQuestion: ${params.query}`;
@@ -114,7 +141,7 @@ export async function dialecticQuery(params: {
 
   // Best-effort: find memory IDs whose content appears in the answer
   const queryLower = params.query.toLowerCase();
-  const supporting = memories
+  const supporting = selected
     .filter((m) => {
       const c = m.content.toLowerCase();
       return answer.toLowerCase().includes(c.slice(0, 40)) || queryLower.split(" ").some((w) => w.length > 4 && c.includes(w));
