@@ -1,52 +1,44 @@
 # ADR-004: Progressive context delivery + async write path
 
 **Status**: Proposed
-**Date**: 2026-07-20
+**Date**: 2026-07-20 (updated 2026-09-08)
 **Deciders**: opencode + dspilarov
 
 ## Context
 
-Сейчас Margo доставляет контекст агенту через `POST /v1/context/pack` — плоский набор результатов, обрезанных до `token_budget`. Агент получает всё сразу или ничего.
+Сейчас Margo доставляет контекст агенту плоско: важная preference и шумный лог сборки занимают одинаковые токены, обрезанные до `token_budget`. Агент получает всё сразу или ничего.
 
 Проблемы:
 1. **Плоский — нет приоритизации**: важная preference и шумный лог сборки занимают одинаковые токены.
-2. **Нет progressive disclosure**: агент не может запросить «только summary» или «детали по вот этому документу».
+2. **Нет progressive disclosure**: агент не может запросить «только кратко» или «полностью по вот этой записи».
 3. **Sync write path**: в server-режиме запись ждёт extraction+embedding+relations (latency до нескольких секунд).
 
-VikingMem решает первое и второе через L0/L1/L2 (abstract → overview → full document). Honcho решает третье через async write (запись мгновенная → reasoning в очереди).
+Honcho решает (3) через async write (запись мгновенная → reasoning в очереди).
 
 ## Decision
 
-### Progressive disclosure
+### Two-level memory content (вместо трёх уровней)
 
-```
-CONTEXT_MODE=flat         # Текущее поведение (обрезать до token_budget)
-CONTEXT_MODE=progressive  # L0 всегда, L1/L2 по запросу
-```
+Каждая запись имеет **2 уровня**:
 
-**L0 (abstract)** — ~100 токенов. Автоматически включается в каждый context pack.
-Генерируется при создании memory из первых N слов контента + типа памяти + importance.
+| Уровень | Что это | Объём | Когда формируется |
+|---|---|---|---|
+| **summary** | короткое описание записи | ~1-2 предложения | автоматически при записи |
+| **full** | основной текст записи | как есть | при записи (сам контент) |
 
-**L1 (overview)** — ~2k токенов. Структура: поля, связи, временной контекст.
-Отдаётся по `include_overview: true` или при `token_budget > 500`.
+**Phase 1 (сейчас) — только формирование.** Когда от агента прилетает запись, Margo сам формирует для неё `summary` из контента. Оба уровня сохраняются вместе с записью.
 
-**L2 (full)** — полный контент memory/chunk.
-Отдаётся по прямому запросу: `GET /v1/context/pack/:id/full`.
+**Phase 2 (потом) — доставка.** Агент сможет запросить `summary` (дёшево, обзор) или `full` (детали по запросу) через параметр контекста. Доставка в этом ADR **не реализуется** — только заготовка данных.
 
-### Async write path (server only)
+### Summary generation — отдельная функция + LLM-задача
 
-```
-POST /v1/memory (sync)
-  ↓
-validate → persist (быстро) → return 202 Accepted { id, status: "pending" }
-  ↓
-[async queue]
-  embed → extract_relations → consolidate → status: "ready"
-```
+- **Новая функция** `generateMemorySummary()` в `engine/memory/summarize.ts`: вход `{ content, memoryType }`, выход — короткое описание (string). Вызывается в write path (`writeMemoryCanonical`) после persist; результат пишется в поле `summary` записи.
+- **Новая LLM-задача в конфиге**: `summarization` — отдельный `{ model, apiKey, baseUrl }` в `config.ts` (`llmCfg.summarization`), fallback env → json → default как у остальных. Default model `gpt-4o-mini`, env-суффикс `LLM_SUMMARIZATION_*`. Это **19-я** LLM-задача.
+- **Хранение**: новое nullable поле `summary` в модели `Memory` (Prisma `schema.prisma`) + миграция.
 
-Клиент может опрашивать: `GET /v1/memory/:id` → `{ status: "pending" | "ready" | "failed" }`.
+### Async write path (server only) — без изменений
 
-Local-режим остаётся синхронным (нет очереди). Конфиг:
+Async-запись уже частично реализована (`POST /v1/memory` → `ingestionQueue`, `GET /v1/memory/jobs/:jobId`). Остаётся как есть, в этом ADR не трогается.
 
 ```
 WRITE_MODE=sync           # Текущее поведение, local default
@@ -55,34 +47,40 @@ WRITE_MODE=async          # Server only, требует Redis/очередь
 
 ## Alternatives Considered
 
-### Option A: Только progressive disclosure (без async write)
-- **Pros**: Меньше scope, проще
-- **Cons**: Основной источник latency — extraction/embedding — не решён
-- **Why rejected**: Progressive без async — косметика. Настоящая проблема в latency записи.
+### Option A: Три уровня (L0 abstract / L1 overview / L2 full)
+- **Pros**: тоньше градация доставки.
+- **Cons**: дороже — два производных текста на запись (abstract + overview); L1/L2 различие редко востребовано агентом.
+- **Why rejected**: 2 уровня (summary + full) покрывают 95% сценариев при меньшей стоимости и сложности.
 
-### Option B: Только async write (без progressive disclosure)
-- **Pros**: Решает latency записи
-- **Cons**: Контекст всё ещё плоский, агент получает шум
-- **Why rejected**: Оба улучшения ортогональны и решают разные проблемы. Делаем оба.
+### Option B: Summary без LLM (первые N слов контента)
+- **Pros**: бесплатно, детерминированно.
+- **Cons**: «первые N слов» — плохое описание для длинных/структурных записей; не отражает суть.
+- **Why rejected**: качество summary критично для Phase 2 (агент будет принимать решение по summary); нужен LLM.
+
+### Option C: Только progressive disclosure (без async write)
+- **Pros**: меньше scope.
+- **Cons**: основной источник latency (extraction/embedding) не решён.
+- **Why rejected**: progressive без async — косметика; обе части ортогональны.
 
 ## Consequences
 
 ### Positive
-- **Latency записи**: sync: 2-5 секунд → async: <100ms (только validate+persist)
-- **Токен-бюджет**: L0 (100 токенов) вместо полного контента → 10-50× экономия
-- **Гибкость**: агент сам решает, когда запрашивать L1/L2
+- **Готовность к progressive disclosure**: summary формируется уже сейчас, доставка — потом без миграции данных.
+- **Дешёвый обзор**: Phase 2 даст 10–50× экономию токенов на обзоре контекста.
+- **Latency записи** (async): sync 2–5 сек → async <100ms.
 
 ### Negative
-- **Сложность**: два режима записи (sync/async), два режима контекста (flat/progressive)
-- **Консистентность**: async — memory видна не сразу (status: pending)
-- **Отладка**: async ошибки не видны клиенту сразу
+- **+1 LLM-вызов на запись** (summary) — рост стоимости/латентности записи в Phase 1.
+- **Схема**: новое поле `summary` → миграция.
+- **Сложность**: +2 режима (CONTEXT_MODE, WRITE_MODE) на Phase 2.
 
 ### Neutral
-- **Конфиг**: +2 env var (`CONTEXT_MODE`, `WRITE_MODE`)
-- **API**: новый эндпоинт `GET /v1/context/pack/:id/full` для L2
+- **Конфиг**: +1 env-группа (`LLM_SUMMARIZATION_*`), +1 поле `llmCfg.summarization`.
+- **API**: Phase 2 добавит параметр уровня в контекст-эндпоинт (сейчас не меняется).
 
 ## Compliance
 
-- Тест: `CONTEXT_MODE=flat` — те же результаты, что и текущий context pack (регрессия)
-- Тест: `CONTEXT_MODE=progressive` — L0 ≤200 токенов, L1 ≤3000 токенов
-- Тест: `WRITE_MODE=async` — `POST /v1/memory` возвращает 202, статус меняется с pending на ready в течение 30 секунд
+- Тест: `generateMemorySummary` возвращает ≤ ~80 токенов по каждому типу записи.
+- Тест: summary пишется в поле `summary` при `writeMemoryCanonical` (outcome `created`).
+- Тест: `llmCfg.summarization` резолвится по fallback-цепочке (env → json → default), как остальные задачи (llm-wiring).
+- Тест: `WRITE_MODE=sync` — поведение записи не меняется (регрессия).
