@@ -173,3 +173,10 @@ Alerting             (SLO/QC-нарушения)
 - **Multi-objective**: тюнер не ухудшает recall при оптимизации latency (проверяемо бенчмарком).
 - **Приватность**: телеметрия не содержит содержимого памятей/запросов (аудит логов).
 - **Неблокируемость**: сбор телеметрии не увеличивает p99 retrieval >5%.
+
+## Related ADRs
+
+- **ADR-010 (benchmarking)** — парный ADR: телеметрия = сигнал, бенчмарк = право применить.
+- **ADR-004 (summary/full)** — summary вместо содержимого в логах (приватность).
+- **ADR-007 (retrieval S0–S3)** — per-layer drop-off, контроль latency SLO.
+- **ADR-009 (memory hygiene)** — data-quality аудит (dangling, `embedding_status`).

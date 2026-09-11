@@ -39,3 +39,8 @@
 
 - **Стабильность**: дисперсия LLM-judge-оценки на 3 повторных прогонах одного набора < 5 п.п. (против 30+ п.п. у anchor-substring).
 - **Корреляция**: LLM-judge совпадает с ручной оценкой ≥ 90% на случайной выборке 10 вопросов.
+
+## Related ADRs
+
+- **ADR-010 (benchmarking & regression)** — LLM-judge входит в benchmark suite.
+- **ADR-011 (telemetry & QC)** — sampled LLM-judge для answer-quality в live.

@@ -94,5 +94,14 @@ Margo (форк RetainDB) имеет работающий пайплайн па�
 
 ### Phase 3: Progressive disclosure + Async write (ADR-004)
 1. `contextMode: "flat" | "progressive"` в config.ts
-2. L0 (.abstract) из метаданных памяти, L1 (.overview) из search results, L2 (full) по запросу
+2. summary из метаданных памяти, full по запросу (см. ADR-004 rev: 2 уровня вместо L0/L1/L2)
 3. Async extraction+consolidation в server-режиме через очередь
+
+## Related ADRs
+
+- **ADR-002 (one-pass extraction)** — Phase 1.
+- **ADR-003 (Dreamer consolidation)** — Phase 2.
+- **ADR-004 (summary/full + async write)** — Phase 3.
+- **ADR-005 (knowledge→skill, Rejected)** — Phase 4, отклонён.
+- **ADR-007 (retrieval S0–S3)** — слой retrieval, развивающий стадию DELIVERY.
+- **ADR-009/010/011 (hygiene / benchmark / telemetry)** — эксплуатация и качество памяти.

@@ -1,7 +1,7 @@
 # ADR-005: Knowledge → Skill pipeline (Hypothesis)
 
-**Status**: Proposed (Hypothesis)
-**Date**: 2026-07-20
+**Status**: Rejected
+**Date**: 2026-07-20 (rejected 2026-09-08)
 **Deciders**: opencode + dspilarov
 
 ## Context
@@ -43,4 +43,9 @@ Feedback loop → reinforcement/decay скилла
 
 - ADR-002 (One-pass extraction): procedure извлекается качественнее → больше кандидатов
 - ADR-003 (Dreamer): inductive pass находит повторяющиеся procedure → skill_candidate
-- ADR-004 (Progressive context): L0 peer-card включает "top skills" пользователя
+- ADR-004 (Progressive context): summary/peer-card мог бы включать "top skills" (не реализуется)
+- ADR-009 (memory hygiene): `skill_candidate` был бы частью селекции — отклонено вместе с ADR-005
+
+## Rejection Rationale
+
+Отклонён 2026-09-08: зависел от ADR-003/004 (Dreamer/peer-card), которые ещё не реализованы; ценность skill-экспорта не доказана спросом; откладывается до появления реального сценария tool-use в Hermes.

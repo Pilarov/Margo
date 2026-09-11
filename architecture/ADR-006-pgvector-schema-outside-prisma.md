@@ -95,3 +95,8 @@ embedding Unsupported("vector")   $queryRaw + <=> wrapper         ALTER COLUMN .
 3. Мигрировать 3 вызова `<=>` на хелпер (`retriever.ts`, `oracle-select.ts`, `routes.ts`).
 4. `prisma/scripts/pgvector.sql` + `scripts/provision-db.sh`.
 5. Тесты: dimension mismatch, helper-возвраты, провиженинг-скрипт.
+
+## Related ADRs
+
+- **ADR-007 (retrieval S0–S3)** — ANN-стратегия (KNN/HNSW/IVFFlat), `filterMode`, второй (fast) вектор — расширение этого слоя.
+- **ADR-009 (memory hygiene)** — threshold-процесс `reindex` пересобирает ANN-индекс.

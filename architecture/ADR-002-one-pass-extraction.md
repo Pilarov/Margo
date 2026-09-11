@@ -95,3 +95,10 @@ Fallback: если one-pass LLM недоступен (нет ключа, оши�
 - Тест: один и тот же текст → `pattern` и `one_pass` должны давать непересекающиеся множества memory (разные методы, не дубликаты контента)
 - Тест: `per_type` должен давать те же результаты, что и до изменений (регрессия)
 - Конфиг: `EXTRACTION_MODE=pattern` в `.env.example` для local, `EXTRACTION_MODE=one_pass` в примере для DeepSeek
+
+## Related ADRs
+
+- **ADR-001 (memory lifecycle v2)** — стадия EXTRACTION.
+- **ADR-003 (Dreamer consolidation)** — вход для inductive pass (procedure → skill_candidate).
+- **ADR-007 (retrieval S0–S3)** — извлечённые типы питают type-recall в S1.
+- **ADR-009 (memory hygiene)** — extraction → near-write процессы (dedup, relations).

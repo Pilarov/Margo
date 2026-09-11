@@ -36,6 +36,21 @@ Honcho решает (3) через async write (запись мгновенна�
 - **Новая LLM-задача в конфиге**: `summarization` — отдельный `{ model, apiKey, baseUrl }` в `config.ts` (`llmCfg.summarization`), fallback env → json → default как у остальных. Default model `gpt-4o-mini`, env-суффикс `LLM_SUMMARIZATION_*`. Это **19-я** LLM-задача.
 - **Хранение**: новое nullable поле `summary` в модели `Memory` (Prisma `schema.prisma`) + миграция.
 
+### Phase 1.5 — summary как ускоритель поиска
+
+`summary` используется не только для доставки, но и как **дешёвое представление записи** в retrieval (ADR-007):
+
+| Где | Использование |
+|---|---|
+| S1 fast-канал | эмбеддинг summary быстрым эмбеддером (короткий текст → быстрее) |
+| S1 lexical | BM25 по summary (короче индекс; LLM выделяет выразительные слова) |
+| S2 rerank | summary как сниппет для cross-encoder/LLM (вместо `content.slice(0,1024)`) |
+| S3 delivery | summary для дешёвого контекста, `full` только для top-K |
+| Dedup / hygiene (ADR-009) | предфильтр по summary перед точным сравнением |
+| Telemetry (ADR-011) | логирование summary вместо содержимого (приватность) |
+
+Ограничения: summary **не заменяет** full-эмбеддинг в semantic (теряет точные термины вроде `grpc`/`pnpm`); при обновлении записи summary пересчитывается (аналог `embedding_status`).
+
 ### Async write path (server only) — без изменений
 
 Async-запись уже частично реализована (`POST /v1/memory` → `ingestionQueue`, `GET /v1/memory/jobs/:jobId`). Остаётся как есть, в этом ADR не трогается.
@@ -84,3 +99,11 @@ WRITE_MODE=async          # Server only, требует Redis/очередь
 - Тест: summary пишется в поле `summary` при `writeMemoryCanonical` (outcome `created`).
 - Тест: `llmCfg.summarization` резолвится по fallback-цепочке (env → json → default), как остальные задачи (llm-wiring).
 - Тест: `WRITE_MODE=sync` — поведение записи не меняется (регрессия).
+
+## Related ADRs
+
+- **ADR-001 (memory lifecycle v2)** — общий контекст стадии DELIVERY.
+- **ADR-007 (retrieval S0–S3)** — summary как сниппет в S1/S2, дешёвый контекст в S3.
+- **ADR-009 (memory hygiene)** — summary как предфильтр dedup.
+- **ADR-011 (telemetry & QC)** — summary вместо содержимого в логах (приватность).
+- **ADR-005 (knowledge→skill, Rejected)** — упоминал L0 peer-card с top skills; не реализуется.

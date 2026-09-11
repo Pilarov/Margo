@@ -176,3 +176,11 @@ candidate → active → decayed → archived → deleted
 - **Recall не падает**: `recall@10 ≥ 0.90` на QA-наборе после прогона hygiene (архивация не съедает релевантное).
 - **Наблюдаемость**: каждый процесс эмитит `{scanned,changed,errors,ms}` в `/v1/admin/hygiene/status`.
 - **Неблокируемость**: p99 `searchMemories`/`retrieve` не растёт >10% при параллельном прогоне hygiene.
+
+## Related ADRs
+
+- **ADR-002 (one-pass extraction)** — near-write процессы (dedup, relations) после extraction.
+- **ADR-003 (Dreamer)** — periodic-процесс консолидации в реестре hygiene.
+- **ADR-004 (summary/full)** — summary как предфильтр dedup; `summary_status` аналог `embedding_status`.
+- **ADR-007 (retrieval S0–S3)** — re-index ANN, чистка dangling-связей, версионные связи S0.
+- **ADR-011 (telemetry & QC)** — observability hygiene-процессов, data-quality аудит.

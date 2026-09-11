@@ -96,3 +96,11 @@ LLM-промпт: «сгенерируй краткий профиль поль�
 - Тест: `basic` режим должен давать те же результаты, что и текущий consolidation (регрессия)
 - Тест: `dreamer` с моком LLM — inductive pass создаёт ожидаемые derived memory
 - Peer-card: не длиннее 500 токенов (проверка в тесте)
+
+## Related ADRs
+
+- **ADR-001 (memory lifecycle v2)** — стадия CONSOLIDATION.
+- **ADR-002 (one-pass extraction)** — источник procedure-памятей для inductive pass.
+- **ADR-005 (knowledge→skill, Rejected)** — опирался на `skill_candidate` из Dreamer; не реализуется.
+- **ADR-007 (retrieval S0–S3)** — peer-card и derived-памяти участвуют в recall.
+- **ADR-009 (memory hygiene)** — Dreamer — periodic-процесс реестра hygiene.
