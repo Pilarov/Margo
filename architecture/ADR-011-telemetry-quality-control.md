@@ -48,7 +48,7 @@
 - **SLO-проверки**: latency > порога, error rate > порога, cache hit < порога → alert.
 - **Drift detection**: распределение score/запросов, доля пустых результатов, изменение drop-off по слоям.
 - **Data quality**: dangling `MemoryRelation`, записи без векторов (`embedding_status`), orphaned chunks, expired-но-активные.
-- **Answer quality** (диалектика): sampled LLM-judge (ADR-008) + пользовательский feedback.
+- **Answer quality** (диалектика): sampled LLM-judge (ADR-010 §Synthesis metric) + пользовательский feedback.
 - **Consistency**: сверка индекса с данными (ANN recall на сэмпле).
 
 ### 3. Control loop (MAPE-K)

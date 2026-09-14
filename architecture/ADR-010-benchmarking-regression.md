@@ -20,7 +20,7 @@
 2. **Один профиль**: только recall@k и anchors; нет precision@k, MRR, NDCG.
 3. **Нет latency/cost-бенчмарков** (SLO из ADR-007 не проверяется).
 4. **Нет baseline**: не с чем сравнивать (метрики не версионируются).
-5. **Synthesis-метрика груба** (anchor substring) — ADR-008 предлагает LLM-judge.
+5. **Synthesis-метрика груба** (anchor substring) — заменяется на LLM-judge (см. §7).
 6. **Нет per-layer метрик** (drop-off по S0–S3, ADR-007).
 
 ## Decision
@@ -32,7 +32,7 @@
 | Категория | Метрики |
 |---|---|
 | Качество (retrieval) | recall@k, precision@k, MRR, NDCG |
-| Качество (synthesis) | anchor coverage + LLM-judge (ADR-008) |
+| Качество (synthesis) | anchor coverage + LLM-judge (§7) |
 | Латентность | p50/p95/p99 по слоям S0–S3 (ADR-007) |
 | Стоимость | токены, LLM-вызовы, $ per query |
 | Здоровье | index recall (ANN vs brute-force), embedding coverage |
@@ -73,6 +73,17 @@
 - `cadence.{onCommit,nightly,onConfigChange}`.
 - `sets.{retrieval,synthesis,latency,cost}`.
 
+### 7. Synthesis metric: LLM-judge (ранее ADR-008, влито сюда)
+
+Anchor-substring нестабилен (разброс 0.53→0.87 из-за семантического кэша и ретраев) и груб (`"Friday"` ≠ `"Fridays"`, переформулировка не засчитывается). Заменяем на **LLM-judge**: LLM сравнивает ответ диалектики с эталонным `answer` из `qa/qa-set.json` по смыслу и возвращает `{correct: boolean, reason: string, score?: 0..1}`. `anchors` остаются как hints для judge, не как жёсткий substring-критерий.
+
+- **Функция**: `judgeAnswer({question, referenceAnswer, candidateAnswer, anchors})`; `temperature=0`; усреднение по N прогонам (недетерминизм митигируется).
+- **LLM-задача**: `judge` в `config.ts` (`llmCfg.judge`, env `LLM_JUDGE_*`), либо reuse `dialectic`.
+- **Хостинг**: server-side `engine/memory/judge.ts` — общая функция для benchmark (здесь) и live answer-quality (ADR-011 §2); альтернатива — direct HTTP из Python (дублирует creds).
+- **Метрика в suite**: `synthesis` = LLM-judge (основная) + anchor coverage (вторичная).
+
+Отклонённые альтернативы: exact match (слишком строго — диалектика редко даёт дословный эталон), BLEU/ROUGE (n-gram overlap, слабо улавливает смысл коротких ответов), оставить substring (уже показал разброс 30+ п.п.).
+
 ## Alternatives Considered
 
 ### Option A: Ручной прогон eval-скриптов (текущее)
@@ -103,13 +114,13 @@
 - **Пороги gate** — требуют калибровки.
 
 ### Neutral
-- ADR-008 (LLM-judge) становится частью benchmark suite.
+- LLM-judge (§7) — часть benchmark suite, общий с live-QC (ADR-011).
 
 ## Risks / Weaknesses
 
 - **Golden set дрейфует** — если память/схема меняются, старые эталоны устаревают.
 - **Переобучение на golden set** — тюнер может подгонять под 21 вопрос; нужен holdout.
-- **LLM-judge недетерминирован** — митигается temperature=0 + усреднение (ADR-008).
+- **LLM-judge недетерминирован** — митигается temperature=0 + усреднение (§7).
 
 ## Open Questions
 
@@ -129,4 +140,3 @@
 
 - **ADR-011 (telemetry & QC)** — парный ADR: телеметрия = сигнал, бенчмарк = право применить.
 - **ADR-007 (retrieval S0–S3)** — recall@10 и p99 S0+S1 из Falsification проверяются здесь.
-- **ADR-008 (LLM-judge)** — synthesis-метрика benchmark suite.

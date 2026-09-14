@@ -1,0 +1,34 @@
+{
+  "user_template": "latency-pool-{n}",
+  "project": "default",
+  "warmup": 5,
+  "repeats": 20,
+  "pools": [
+    {
+      "n": 1000,
+      "queries": [
+        "deployment process",
+        "database choice",
+        "caching strategy",
+        "authentication approach",
+        "billing solution",
+        "monitoring stack",
+        "release workflow",
+        "search implementation"
+      ]
+    },
+    {
+      "n": 10000,
+      "queries": [
+        "deployment process",
+        "database choice",
+        "caching strategy",
+        "authentication approach",
+        "billing solution",
+        "monitoring stack",
+        "release workflow",
+        "search implementation"
+      ]
+    }
+  ]
+}

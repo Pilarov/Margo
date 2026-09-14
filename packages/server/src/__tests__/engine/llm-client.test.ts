@@ -12,6 +12,7 @@ vi.mock("../../config.js", () => ({
       baseUrl: "https://rerank.example.com/v1",
     },
   },
+  telemetry: { collector: { enabled: false, maxSamples: 1000 } },
 }));
 
 import { getLLMClient, resetLLMClient } from "../../engine/llm-client.js";
@@ -80,6 +81,7 @@ describe("getLLMClient: error handling", () => {
     vi.resetModules();
     vi.doMock("../../config.js", () => ({
       llm: { defaultApiKey: undefined, defaultBaseUrl: undefined },
+      telemetry: { collector: { enabled: false, maxSamples: 1000 } },
     }));
     const mod = await import("../../engine/llm-client.js");
     expect(() => mod.getLLMClient({ model: "x" })).toThrow(/OPENAI_API_KEY/);

@@ -221,3 +221,60 @@ export const consolidationMode: ConsolidationMode = (() => {
 // dimensions:1024) and local (BGE-large) both emit 1024; gemini emits 768 and
 // requires a re-index when switched.
 export const EMBEDDING_DIM = num(process.env.EMBEDDING_DIM, 1024);
+
+// ── Benchmark config (ADR-010) ──────────────────────────────────────────────
+const jBenchmark = (json.benchmark ?? {}) as Record<string, any>;
+const jGates = (jBenchmark.gates ?? {}) as Record<string, any>;
+const jCadence = (jBenchmark.cadence ?? {}) as Record<string, any>;
+const jBenchSets = (jBenchmark.sets ?? {}) as Record<string, any>;
+
+export interface BenchmarkConfig {
+  gates: {
+    recallDeltaPp: number;
+    latencyDeltaPct: number;
+    costDeltaPct: number;
+    synthesisDeltaPp: number;
+  };
+  cadence: { onCommit: string; nightly: string; onConfigChange: boolean };
+  sets: { retrieval: string; synthesis: string; latency: string; cost: string };
+}
+
+export const benchmark: BenchmarkConfig = {
+  gates: {
+    recallDeltaPp: num(process.env.BENCH_RECALL_DELTA_PP, jGates.recallDeltaPp) ?? 2,
+    latencyDeltaPct: num(process.env.BENCH_LATENCY_DELTA_PCT, jGates.latencyDeltaPct) ?? 10,
+    costDeltaPct: num(process.env.BENCH_COST_DELTA_PCT, jGates.costDeltaPct) ?? 15,
+    synthesisDeltaPp: num(process.env.BENCH_SYNTHESIS_DELTA_PP, jGates.synthesisDeltaPp) ?? 5,
+  },
+  cadence: {
+    onCommit: str(process.env.BENCH_ON_COMMIT, jCadence.onCommit) || "subset",
+    nightly: str(process.env.BENCH_NIGHTLY, jCadence.nightly) || "full",
+    onConfigChange: bool(process.env.BENCH_ON_CONFIG_CHANGE, jCadence.onConfigChange ?? true),
+  },
+  sets: {
+    retrieval: str(process.env.BENCH_SET_RETRIEVAL, jBenchSets.retrieval) || "qa/qa-set.json",
+    synthesis: str(process.env.BENCH_SET_SYNTHESIS, jBenchSets.synthesis) || "qa/qa-set.json",
+    latency: str(process.env.BENCH_SET_LATENCY, jBenchSets.latency) || "qa/latency-set.json",
+    cost: str(process.env.BENCH_SET_COST, jBenchSets.cost) || "qa/cost-set.json",
+  },
+};
+
+// ── Telemetry config (ADR-011) ──────────────────────────────────────────────
+const jTelemetry = (json.telemetry ?? {}) as Record<string, any>;
+const jCollector = (jTelemetry.collector ?? {}) as Record<string, any>;
+const jDropOff = (jTelemetry.dropOff ?? {}) as Record<string, any>;
+
+export interface TelemetryConfig {
+  collector: { enabled: boolean; maxSamples: number };
+  dropOff: { enabled: boolean };
+}
+
+export const telemetry: TelemetryConfig = {
+  collector: {
+    enabled: bool(process.env.TELEMETRY_ENABLED, jCollector.enabled ?? true),
+    maxSamples: num(process.env.TELEMETRY_MAX_SAMPLES, jCollector.maxSamples) ?? 1000,
+  },
+  dropOff: {
+    enabled: bool(process.env.TELEMETRY_DROPOFF_ENABLED, jDropOff.enabled ?? true),
+  },
+};

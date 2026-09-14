@@ -1,8 +1,10 @@
 # ADR-008: LLM-judge для оценки synthesis вместо anchor-substring
 
-**Status**: Proposed
-**Date**: 2026-09-04
+**Status**: Merged into ADR-010
+**Date**: 2026-09-04 (merged 2026-09-08)
 **Deciders**: opencode + dspilarov
+
+> **Влит в ADR-010 §7 «Synthesis metric: LLM-judge».** Содержимое перенесено туда; этот ADR сохранён для истории (append-only). Ссылки в других ADR указывают на ADR-010 §Synthesis metric.
 
 ## Context
 

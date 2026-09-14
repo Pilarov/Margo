@@ -31,6 +31,8 @@ import { fireWebhookEvent } from "../engine/webhooks.js";
 import { embedSingle } from "../engine/embeddings.js";
 import { ingestSession as ingestMemorySession, searchMemories } from "../engine/memory/index.js";
 import { writeMemoryCanonical } from "../engine/memory/write.js";
+import { judgeAnswer } from "../engine/memory/judge.js";
+import { getDropOffSummary, resetTelemetry } from "../engine/telemetry/collector.js";
 import { nanoid } from "nanoid";
 import { createHash } from "crypto";
 import { memoryRoutes } from "./memory.js";
@@ -3417,6 +3419,45 @@ api.post("/v1/admin/latency/reset", async (c) => {
   const auth = c.get("auth") as AuthContext;
   if (!auth.isAdmin) return c.json({ error: "Admin access required" }, 403);
   return c.json(resetLatencySummary());
+});
+
+// ─── Benchmark: LLM-judge (ADR-010 §7) ──────────────────────
+// Used by scripts/benchmark to score dialectic answers semantically instead of
+// by anchor substrings. Reuses the dialectic LLM task.
+api.post("/v1/admin/benchmark/judge", async (c) => {
+  const auth = c.get("auth") as AuthContext;
+  if (!auth.isAdmin) return c.json({ error: "Admin access required" }, 403);
+
+  const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
+  const { question, reference_answer, candidate_answer } = body as Record<string, unknown>;
+  if (!question || !reference_answer || !candidate_answer) {
+    return c.json({ error: "question, reference_answer and candidate_answer are required" }, 400);
+  }
+
+  const anchors = Array.isArray((body as any).anchors)
+    ? ((body as any).anchors as unknown[]).filter((a): a is string => typeof a === "string")
+    : undefined;
+
+  const result = await judgeAnswer({
+    question: String(question),
+    referenceAnswer: String(reference_answer),
+    candidateAnswer: String(candidate_answer),
+    anchors,
+  });
+  return c.json(result);
+});
+
+// ─── Telemetry: per-layer drop-off (ADR-011 §1) ─────────────
+api.get("/v1/admin/telemetry/drop-off", async (c) => {
+  const auth = c.get("auth") as AuthContext;
+  if (!auth.isAdmin) return c.json({ error: "Admin access required" }, 403);
+  return c.json(getDropOffSummary());
+});
+
+api.post("/v1/admin/telemetry/reset", async (c) => {
+  const auth = c.get("auth") as AuthContext;
+  if (!auth.isAdmin) return c.json({ error: "Admin access required" }, 403);
+  return c.json(resetTelemetry());
 });
 
 api.get("/v1/admin/extraction/config", async (c) => {

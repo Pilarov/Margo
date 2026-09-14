@@ -16,7 +16,8 @@ import { embedSingle } from "../embeddings.js";
 import { parseTemporalFast } from "./temporal-local.js";
 import { calculateTemporalRelevance } from "./temporal.js";
 import { getFromSemanticCache, setInSemanticCache, getFromCache, setInCache } from "../cache.js";
-import type { MemoryScopeTarget, MemorySearchDiagnostics, MemorySearchParams, MemorySearchResult } from "./types.js";
+import type { MemoryScopeTarget, MemorySearchDiagnostics, MemorySearchParams, MemorySearchResult, MemoryStage } from "./types.js";
+import { recordSearchTelemetry } from "../telemetry/collector.js";
 import { Prisma } from "@prisma/client";
 import { decrypt } from "../../lib/encryption.js";
 
@@ -158,12 +159,9 @@ function emitDiagnostics(
   timings: TimingLog[],
   totalMs: number,
   cacheHitType: "none" | "simple" | "semantic",
-  fastMode: boolean
+  fastMode: boolean,
+  stages?: MemoryStage[]
 ): void {
-  if (typeof params.diagnosticsCollector !== "function") {
-    return;
-  }
-
   const sumStep = (...steps: string[]) =>
     timings
       .filter((timing) => steps.includes(timing.step))
@@ -185,9 +183,13 @@ function emitDiagnostics(
     cache_hit: cacheHitType !== "none",
     cache_hit_type: cacheHitType,
     fast_mode: fastMode,
+    ...(stages && stages.length > 0 ? { stages } : {}),
   };
 
-  params.diagnosticsCollector(diagnostics);
+  recordSearchTelemetry(diagnostics);
+  if (typeof params.diagnosticsCollector === "function") {
+    params.diagnosticsCollector(diagnostics);
+  }
 }
 
 function resolveApplicableScopes(params: Pick<MemorySearchParams, "userId" | "sessionId" | "agentId" | "taskId" | "scopes">): MemoryScopeTarget[] {
@@ -237,6 +239,7 @@ export async function searchMemories(
   params: MemorySearchParams
 ): Promise<MemorySearchResult[]> {
   const timings: TimingLog[] = [];
+  const stages: MemoryStage[] = [];
   const startTotal = Date.now();
   const disableLatencyDegradation = shouldDisableLatencyDegradation(params);
 
@@ -279,7 +282,7 @@ export async function searchMemories(
     timings.push({ step: "TOTAL", duration: total });
     logTimings(timings, query);
     console.log("⚡ Simple cache hit");
-    emitDiagnostics(params, timings, total, cacheHitType, effectiveFastMode);
+    emitDiagnostics(params, timings, total, cacheHitType, effectiveFastMode, stages);
     return simpleCached;
   }
 
@@ -300,7 +303,7 @@ export async function searchMemories(
     const total = Date.now() - startTotal;
     timings.push({ step: "TOTAL", duration: total });
     logTimings(timings, query);
-    emitDiagnostics(params, timings, total, cacheHitType, effectiveFastMode);
+    emitDiagnostics(params, timings, total, cacheHitType, effectiveFastMode, stages);
     return results;
   }
 
@@ -328,6 +331,7 @@ export async function searchMemories(
     limit: topK * 3, // Get more for reranking
   });
   timings.push({ step: "vector_search", duration: Date.now() - vectorStart });
+  stages.push({ name: "vector", in: topK * 3, out: semanticResults.length });
   const scopedSemanticResults = rerankByScope(semanticResults, { userId, sessionId, agentId, taskId });
 
   // Type-aware recall boost: when the query asks for a specific memory type, also
@@ -346,6 +350,7 @@ export async function searchMemories(
             : queryIntent.asksForWorkflows
               ? ["workflow"]
               : null;
+  const beforeTypeRecall = scopedSemanticResults.length;
   if (typeRecallTypes && userId) {
     const typeMemories = await db.memory.findMany({
       where: {
@@ -387,6 +392,7 @@ export async function searchMemories(
       });
     }
   }
+  stages.push({ name: "type_recall", in: beforeTypeRecall, out: scopedSemanticResults.length });
 
   // Guardrail: if we're already over budget after vector search, degrade to fast mode.
   if (!disableLatencyDegradation && !effectiveFastMode && Date.now() - startTotal > POST_VECTOR_BUDGET_MS) {
@@ -400,7 +406,7 @@ export async function searchMemories(
     const total = Date.now() - startTotal;
     timings.push({ step: "TOTAL", duration: total });
     logTimings(timings, query);
-    emitDiagnostics(params, timings, total, cacheHitType, effectiveFastMode);
+    emitDiagnostics(params, timings, total, cacheHitType, effectiveFastMode, stages);
     return [];
   }
 
@@ -416,7 +422,7 @@ export async function searchMemories(
     const total = Date.now() - startTotal;
     timings.push({ step: "TOTAL", duration: total });
     logTimings(timings, query);
-    emitDiagnostics(params, timings, total, cacheHitType, effectiveFastMode);
+    emitDiagnostics(params, timings, total, cacheHitType, effectiveFastMode, stages);
     return topMemories;
   }
 
@@ -457,6 +463,7 @@ export async function searchMemories(
     // Take top K
     finalResults = combined.slice(0, topK);
   }
+  stages.push({ name: "graph_temporal", in: scopedSemanticResults.length, out: candidatePool.length });
 
   // Step 4b: Intent-aware reranking over the full candidate pool (so type boosts
   // can surface on-type memories that ranked low semantically).
@@ -473,6 +480,7 @@ export async function searchMemories(
     const intentStart = Date.now();
     finalResults = rerankByIntent(candidatePool, questionDate, queryIntent).slice(0, topK);
     timings.push({ step: "intent_rerank", duration: Date.now() - intentStart });
+    stages.push({ name: "intent_rerank", in: candidatePool.length, out: finalResults.length });
   }
 
   // Step 5: Inject source chunks for context (skip in fast mode)
@@ -517,6 +525,7 @@ export async function searchMemories(
     results = await injectSourceChunks(finalResults);
     timings.push({ step: "chunk_injection", duration: Date.now() - chunkStart });
   }
+  stages.push({ name: "final", in: finalResults.length, out: results.length });
 
   // Cache results for similar queries
   const cacheWriteStart = Date.now();
@@ -530,7 +539,7 @@ export async function searchMemories(
     console.warn(`[MemorySearch] SLO miss: ${total}ms (budget=${TOTAL_SLO_BUDGET_MS}ms)`);
   }
   logTimings(timings, query);
-  emitDiagnostics(params, timings, total, cacheHitType, effectiveFastMode);
+  emitDiagnostics(params, timings, total, cacheHitType, effectiveFastMode, stages);
 
   return results;
 }

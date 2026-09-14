@@ -19,9 +19,26 @@ import requests
 
 BASE = os.environ.get("RETAINDB_BASE_URL", "http://localhost:3000").rstrip("/")
 KEY = os.environ.get("RETAINDB_API_KEY", "margo-test-key")
-USER = os.environ.get("RETAINDB_USER", "dialectic-test-user")
-MAP_PATH = os.path.join(os.path.dirname(__file__), "..", "qa", "memory_map.json")
+HERE = os.path.dirname(os.path.abspath(__file__))
+QA_PATH = os.path.join(HERE, "..", "qa", "qa-set.json")
+MAP_PATH = os.path.join(HERE, "..", "qa", "memory_map.json")
 H = {"Authorization": f"Bearer {KEY}", "Content-Type": "application/json"}
+
+
+def _qa_user() -> str:
+    """qa/qa-set.json is the single source of truth for the eval user.
+
+    eval-synthesis.py and eval-retrieval.py resolve the same user; keeping the
+    seed in sync prevents the synthesis eval from querying an empty profile.
+    """
+    try:
+        with open(QA_PATH) as f:
+            return json.load(f).get("user") or "working-memory-test-user"
+    except (OSError, ValueError):
+        return "working-memory-test-user"
+
+
+USER = os.environ.get("RETAINDB_USER") or _qa_user()
 
 # (slug, content, memory_type, importance, entity_mentions)
 MEMORIES = [

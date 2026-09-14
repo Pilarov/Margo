@@ -128,6 +128,19 @@ export interface MemorySearchParams {
   diagnosticsCollector?: (diagnostics: MemorySearchDiagnostics) => void;
 }
 
+export interface MemoryStage {
+  /**
+   * Stage name. Retrieval owns the vocabulary (e.g. "vector", "intent_rerank"
+   * today, "S0".."S3" after ADR-007). Telemetry never hard-codes stage names, so
+   * it adapts automatically when the retrieval architecture changes.
+   */
+  name: string;
+  /** Candidates entering the stage. */
+  in: number;
+  /** Candidates surviving the stage. */
+  out: number;
+}
+
 export interface MemorySearchDiagnostics {
   cache_ms: number;
   embed_ms: number;
@@ -138,6 +151,8 @@ export interface MemorySearchDiagnostics {
   cache_hit: boolean;
   cache_hit_type: "none" | "simple" | "semantic";
   fast_mode: boolean;
+  /** Ordered retrieval stages with candidate counts (dynamic; ADR-011 §1). */
+  stages?: MemoryStage[];
 }
 
 export interface MemorySearchResult {

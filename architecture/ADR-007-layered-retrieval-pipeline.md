@@ -236,9 +236,10 @@ engine/embeddings-fast.ts   отдельный модуль (model2vec), сво�
 
 - **ADR-004 (summary/full)** — summary как сниппет в S1/S2 и дешёвый контекст в S3.
 - **ADR-006 (pgvector вне Prisma)** — базис для ANN-стратегии и второго вектора.
-- **ADR-008 (LLM-judge)** — метрика для Falsification (synthesis).
+- **ADR-010 §Synthesis metric (LLM-judge)** — метрика для Falsification (synthesis).
 - **ADR-009 (memory hygiene)** — re-index ANN, `embedding_status`, чистка связей.
 - **ADR-010 (benchmarking)** — regression gate для refactoring (recall@10, p99).
 - **ADR-011 (telemetry & QC)** — per-layer drop-off, дрейф, control loop.
 - **ADR-002 (one-pass extraction)** — типы памятей питают type-recall в S1.
 - **ADR-003 (Dreamer)** — derived-памяти и peer-card в recall.
+- **ADR-012 (model-agnostic inference providers)** — S0/S1/S2 используют провайдеры; fast = `fastEmbedding`; rerank = `RerankProvider`.

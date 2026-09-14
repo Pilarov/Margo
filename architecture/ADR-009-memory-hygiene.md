@@ -184,3 +184,4 @@ candidate → active → decayed → archived → deleted
 - **ADR-004 (summary/full)** — summary как предфильтр dedup; `summary_status` аналог `embedding_status`.
 - **ADR-007 (retrieval S0–S3)** — re-index ANN, чистка dangling-связей, версионные связи S0.
 - **ADR-011 (telemetry & QC)** — observability hygiene-процессов, data-quality аудит.
+- **ADR-012 (model-agnostic inference providers)** — reembed как threshold-процесс при смене провайдера.

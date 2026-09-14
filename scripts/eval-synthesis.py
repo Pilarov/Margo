@@ -18,13 +18,18 @@ KEY = os.environ.get("RETAINDB_API_KEY", "margo-test-key")
 H = {"Authorization": f"Bearer {KEY}", "Content-Type": "application/json"}
 HERE = os.path.dirname(os.path.abspath(__file__))
 QA_PATH = os.path.join(HERE, "..", "qa", "qa-set.json")
+MAP_PATH = os.path.join(HERE, "..", "qa", "memory_map.json")
 
 LEVEL = sys.argv[2] if len(sys.argv) > 2 and sys.argv[1] == "--level" else "medium"
 
 with open(QA_PATH) as f:
     qa = json.load(f)
+with open(MAP_PATH) as f:
+    mem_map = json.load(f)
 
-user = os.environ.get("RETAINDB_USER", qa["user"])
+# Resolve the user the same way as eval-retrieval.py (memory_map, written by the
+# seed), not qa["user"] directly — they must stay in sync.
+user = os.environ.get("RETAINDB_USER") or mem_map["user"]
 rows = []
 for item in qa["items"]:
     r = requests.post(BASE + f"/v1/memory/profile/{user}/ask", headers=H, json={

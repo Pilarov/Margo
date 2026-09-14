@@ -12,3 +12,6 @@ packages/server/data/
 coverage/
 reviews/
 qa/memory_map.json
+qa/bench-*.json
+__pycache__/
+*.pyc

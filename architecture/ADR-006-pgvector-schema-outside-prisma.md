@@ -100,3 +100,4 @@ embedding Unsupported("vector")   $queryRaw + <=> wrapper         ALTER COLUMN .
 
 - **ADR-007 (retrieval S0–S3)** — ANN-стратегия (KNN/HNSW/IVFFlat), `filterMode`, второй (fast) вектор — расширение этого слоя.
 - **ADR-009 (memory hygiene)** — threshold-процесс `reindex` пересобирает ANN-индекс.
+- **ADR-012 (model-agnostic inference providers)** — `dim`/metric — свойства провайдера, не константа; колонка создаётся под конфиг.
