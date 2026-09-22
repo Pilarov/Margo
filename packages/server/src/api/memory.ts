@@ -632,7 +632,8 @@ memoryRoutes.post(
       namespace: z.string().optional(),
       tags: z.array(z.string()).optional(),
       fast_mode: z.boolean().optional(),
-      profile: z.enum(["fast", "balanced", "quality"]).optional().default("fast"),
+      // No default here: an implicit "fast" would shadow fast_mode:false below.
+      profile: z.enum(["fast", "balanced", "quality"]).optional(),
       include_pending: z.boolean().optional().default(true),
     })
   ),
@@ -754,7 +755,6 @@ memoryRoutes.post(
         diagnostics = {
           ...diagnostics,
           lexical_ms: lexicalLatencyMs,
-          fast_mode: true,
         };
       }
 

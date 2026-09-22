@@ -30,9 +30,9 @@ function extractToken(raw: string | undefined): string {
 export async function authMiddleware(c: Context, next: Next) {
   const configuredKey = process.env.RETAINDB_API_KEY;
 
-  // No key configured → open access
+  // No key configured → open access (private/dev deployment; single-tenant owner).
   if (!configuredKey) {
-    c.set("auth", { orgId: "default", authType: "open" } satisfies AuthContext);
+    c.set("auth", { orgId: "default", authType: "open", isAdmin: true } satisfies AuthContext);
     await next();
     return;
   }
@@ -43,6 +43,8 @@ export async function authMiddleware(c: Context, next: Next) {
     return c.json({ error: "Unauthorized. Set Authorization: Bearer <your RETAINDB_API_KEY>." }, 401);
   }
 
-  c.set("auth", { orgId: "default", authType: "api_key" } satisfies AuthContext);
+  // OSS is single-tenant: the API-key holder is the instance owner, so admin
+  // endpoints (/v1/admin/*) are available to them.
+  c.set("auth", { orgId: "default", authType: "api_key", isAdmin: true } satisfies AuthContext);
   await next();
 }

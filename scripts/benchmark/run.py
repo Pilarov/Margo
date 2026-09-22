@@ -69,6 +69,7 @@ def run_retrieval(qa: dict, slug_to_id: dict, user: str, k: int) -> tuple[list, 
             "user_id": user,
             "top_k": k,
             "include_pending": True,
+            "fast_mode": False,
         }, timeout=60)
         results = (r.json() or {}).get("results", [])
         top = [res.get("memory", {}).get("id") for res in results]
@@ -91,19 +92,22 @@ def run_latency(latency_cfg: dict) -> list[dict]:
     results: list[dict] = []
     project = latency_cfg.get("project", "default")
     repeats = int(latency_cfg.get("repeats", 1))
+    fast_mode = bool(latency_cfg.get("fast_mode", False))
     for pool in latency_cfg["pools"]:
         user = latency_cfg["user_template"].format(n=pool["n"])
         queries = pool["queries"]
         for i in range(int(latency_cfg.get("warmup", 0))):
             requests.post(BASE + "/v1/memory/search", headers=H, json={
-                "project": project, "query": queries[i % len(queries)], "user_id": user, "top_k": 10,
+                "project": project, "query": queries[i % len(queries)], "user_id": user,
+                "top_k": 10, "fast_mode": fast_mode,
             }, timeout=60)
         samples: list[float] = []
         for _ in range(repeats):
             for query in queries:
                 started = time.perf_counter()
                 requests.post(BASE + "/v1/memory/search", headers=H, json={
-                    "project": project, "query": query, "user_id": user, "top_k": 10,
+                    "project": project, "query": query, "user_id": user,
+                    "top_k": 10, "fast_mode": fast_mode,
                 }, timeout=60)
                 samples.append((time.perf_counter() - started) * 1000)
         entry = {

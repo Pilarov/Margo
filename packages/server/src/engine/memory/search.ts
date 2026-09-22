@@ -32,6 +32,9 @@ const TOTAL_SLO_BUDGET_MS = parseInt(process.env.MEMORY_SEARCH_TOTAL_BUDGET_MS |
 const POST_VECTOR_BUDGET_MS = parseInt(process.env.MEMORY_SEARCH_POST_VECTOR_BUDGET_MS || "120", 10);
 const CHUNK_INJECTION_GUARDRAIL_MS = parseInt(process.env.MEMORY_SEARCH_CHUNK_GUARDRAIL_MS || "180", 10);
 
+// Benchmark escape hatch: bypass caches so runs are independent and reproducible.
+const DISABLE_CACHE = /^true$/i.test(process.env.MEMORY_SEARCH_DISABLE_CACHE || "false");
+
 // Timing instrumentation
 interface TimingLog {
   step: string;
@@ -273,7 +276,7 @@ export async function searchMemories(
   // Step 0a: Check simple cache first (before embedding!)
   const step0Start = Date.now();
   const cacheKey = `search:${projectId}:${userId || ""}:${sessionId || ""}:${agentId || ""}:${taskId || ""}:${applicableScopes.join(",")}:${query}:${topK}`;
-  const simpleCached = await getFromCache<MemorySearchResult[]>(cacheKey);
+  const simpleCached = DISABLE_CACHE ? null : await getFromCache<MemorySearchResult[]>(cacheKey);
   timings.push({ step: "simple_cache", duration: Date.now() - step0Start });
   
   if (simpleCached) {
@@ -292,14 +295,14 @@ export async function searchMemories(
   timings.push({ step: "embedding", duration: Date.now() - embedStart });
 
   const semanticCacheStart = Date.now();
-  const cached = await getFromSemanticCache(queryEmbedding);
+  const cached = DISABLE_CACHE ? null : await getFromSemanticCache(queryEmbedding);
   timings.push({ step: "semantic_cache_check", duration: Date.now() - semanticCacheStart });
 
   if (cached && cached.similarity >= SEMANTIC_CACHE_THRESHOLD) {
     cacheHitType = "semantic";
     console.log(`⚡ Semantic cache hit (similarity: ${cached.similarity.toFixed(3)})`);
     const results = cached.results.slice(0, topK);
-    await setInCache(cacheKey, results, 300);
+    if (!DISABLE_CACHE) await setInCache(cacheKey, results, 300);
     const total = Date.now() - startTotal;
     timings.push({ step: "TOTAL", duration: total });
     logTimings(timings, query);
@@ -402,7 +405,7 @@ export async function searchMemories(
   }
 
   if (scopedSemanticResults.length === 0) {
-    await setInCache(cacheKey, [], 60); // Cache empty results too
+    if (!DISABLE_CACHE) await setInCache(cacheKey, [], 60); // Cache empty results too
     const total = Date.now() - startTotal;
     timings.push({ step: "TOTAL", duration: total });
     logTimings(timings, query);
@@ -416,8 +419,8 @@ export async function searchMemories(
     const topMemories = await injectSourceChunks(scopedSemanticResults.slice(0, topK));
 
     // Cache good results
-    await setInSemanticCache(queryEmbedding, topMemories, 300);
-    await setInCache(cacheKey, topMemories, 300); // 5 min cache
+    if (!DISABLE_CACHE) await setInSemanticCache(queryEmbedding, topMemories, 300);
+    if (!DISABLE_CACHE) await setInCache(cacheKey, topMemories, 300); // 5 min cache
 
     const total = Date.now() - startTotal;
     timings.push({ step: "TOTAL", duration: total });
@@ -529,7 +532,7 @@ export async function searchMemories(
 
   // Cache results for similar queries
   const cacheWriteStart = Date.now();
-  await setInSemanticCache(queryEmbedding, results, 300);
+  if (!DISABLE_CACHE) await setInSemanticCache(queryEmbedding, results, 300);
   await setInCache(cacheKey, results, 300); // 5 min cache
   timings.push({ step: "cache_write", duration: Date.now() - cacheWriteStart });
 

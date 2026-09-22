@@ -15,6 +15,8 @@ Usage:
 """
 import json
 import os
+import time
+
 import requests
 
 BASE = os.environ.get("RETAINDB_BASE_URL", "http://localhost:3000").rstrip("/")
@@ -39,6 +41,35 @@ def _qa_user() -> str:
 
 
 USER = os.environ.get("RETAINDB_USER") or _qa_user()
+
+
+def wait_until_indexed(timeout_s: int = 60) -> bool:
+    """Poll search until a seeded memory is retrievable.
+
+    Writes can be accepted before the embedding worker has indexed them; a
+    benchmark run started immediately after seeding would then see recall 0.
+    """
+    if not slug_to_id:
+        return False
+    sample_slug = next(iter(slug_to_id))
+    sample_id = slug_to_id[sample_slug]
+    content = next((c for s, c, *_ in MEMORIES if s == sample_slug), None)
+    if not content:
+        return False
+    deadline = time.time() + timeout_s
+    while time.time() < deadline:
+        try:
+            r = requests.post(BASE + "/v1/memory/search", headers=H, json={
+                "project": "default", "query": content, "user_id": USER,
+                "top_k": 50, "include_pending": True,
+            }, timeout=30)
+            ids = [x.get("memory", {}).get("id") for x in (r.json() or {}).get("results", [])]
+            if sample_id in ids:
+                return True
+        except requests.RequestException:
+            pass
+        time.sleep(2)
+    return False
 
 # (slug, content, memory_type, importance, entity_mentions)
 MEMORIES = [
@@ -135,3 +166,6 @@ with open(MAP_PATH, "w") as f:
 
 print(f"\nSeeded {count}/{len(MEMORIES)} working memories for {USER}")
 print(f"Memory map written to {MAP_PATH}")
+
+ready = wait_until_indexed()
+print(f"Indexing: {'ready' if ready else 'TIMEOUT (search may return 0)'}")
