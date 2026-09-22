@@ -12,34 +12,33 @@ const _clients = new Map<string, OpenAI>();
  */
 function instrumentClient(client: OpenAI): OpenAI {
   return new Proxy(client, {
-    get(target, prop, receiver) {
+    get(target, prop) {
+      const value = Reflect.get(target, prop, target);
       if (prop === "chat") {
-        const chat = Reflect.get(target, prop, receiver);
-        return new Proxy(chat, {
-          get(chatTarget, chatProp, chatReceiver) {
+        return new Proxy(value, {
+          get(chatTarget, chatProp) {
+            const chatValue = Reflect.get(chatTarget, chatProp, chatTarget);
             if (chatProp === "completions") {
-              const completions = Reflect.get(chatTarget, chatProp, chatReceiver);
-              return new Proxy(completions, {
-                get(compTarget, compProp, compReceiver) {
+              return new Proxy(chatValue, {
+                get(compTarget, compProp) {
+                  const fn = Reflect.get(compTarget, compProp, compTarget);
                   if (compProp === "create") {
-                    const original = Reflect.get(compTarget, compProp, compReceiver);
                     return async (...args: unknown[]) => {
-                      const response = await original(...args);
+                      // Call with the real Completions instance as `this`, otherwise
+                      // the SDK's private `_client` is undefined.
+                      const response = await fn.call(compTarget, ...args);
                       recordLLMUsage((response as { usage?: unknown } | undefined)?.usage);
                       return response;
                     };
                   }
-                  const value = Reflect.get(compTarget, compProp, compReceiver);
-                  return typeof value === "function" ? value.bind(compTarget) : value;
+                  return typeof fn === "function" ? fn.bind(compTarget) : fn;
                 },
               });
             }
-            const value = Reflect.get(chatTarget, chatProp, chatReceiver);
-            return typeof value === "function" ? value.bind(chatTarget) : value;
+            return typeof chatValue === "function" ? chatValue.bind(chatTarget) : chatValue;
           },
         });
       }
-      const value = Reflect.get(target, prop, receiver);
       return typeof value === "function" ? value.bind(target) : value;
     },
   });

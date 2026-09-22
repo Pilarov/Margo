@@ -122,9 +122,56 @@ def run_latency(latency_cfg: dict) -> list[dict]:
     return results
 
 
+def run_synthesis(qa: dict, user: str, level: str = "medium") -> list[dict]:
+    """Score dialectic answers with the LLM-judge (ADR-010 §7).
+
+    Primary metric: judge score. Secondary: anchor coverage (kept as a cheap
+    signal, no longer the pass/fail criterion).
+    """
+    per_question: list[dict] = []
+    for item in qa["items"]:
+        answer = ""
+        try:
+            r = requests.post(BASE + f"/v1/memory/profile/{user}/ask", headers=H, json={
+                "project": "default", "query": item["question"], "reasoning_level": level,
+            }, timeout=120)
+            answer = (r.json() or {}).get("answer") or ""
+        except requests.RequestException as exc:
+            print(f"{item['id']}: dialectic error {exc}")
+
+        score, correct = 0.0, False
+        try:
+            jr = requests.post(BASE + "/v1/admin/benchmark/judge", headers=H, json={
+                "question": item["question"],
+                "reference_answer": item["answer"],
+                "candidate_answer": answer,
+                "anchors": item.get("anchors", []),
+            }, timeout=120)
+            j = jr.json() or {}
+            score = float(j.get("score", 0.0))
+            correct = bool(j.get("correct", False))
+        except (requests.RequestException, ValueError) as exc:
+            print(f"{item['id']}: judge error {exc}")
+
+        anchors = item.get("anchors", [])
+        anchor_cov = sum(1 for a in anchors if a.lower() in answer.lower()) / len(anchors) if anchors else 0.0
+        per_question.append({
+            "id": item["id"], "judge_score": score, "judge_correct": correct,
+            "anchor_coverage": anchor_cov,
+        })
+        print(f"{item['id']}: judge={score:.2f} correct={correct} anchors={anchor_cov:.2f}")
+    return per_question
+
+
 def write_baseline(metrics: dict, per_question: list) -> str:
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    payload = {"timestamp": datetime.now(timezone.utc).isoformat(), "metrics": metrics,
+    # Merge so a synthesis run does not wipe retrieval metrics (single baseline
+    # file holds both suites' metrics; the gate compares the keys present in both).
+    existing: dict = {}
+    if os.path.exists(BASELINE_PATH):
+        existing = load_json(BASELINE_PATH).get("metrics", {})
+    merged = {**existing, **metrics}
+    payload = {"timestamp": datetime.now(timezone.utc).isoformat(), "metrics": merged,
                "per_question": per_question}
     dated = os.path.join(REPO, "qa", f"baseline-{stamp}.json")
     with open(dated, "w") as f:
@@ -137,7 +184,7 @@ def write_baseline(metrics: dict, per_question: list) -> str:
 def main() -> int:
     p = argparse.ArgumentParser(description="Margo benchmark runner (ADR-010)")
     p.add_argument("--profile", choices=["on-commit", "nightly"], default="on-commit")
-    p.add_argument("--suite", choices=["retrieval", "latency"], default="retrieval")
+    p.add_argument("--suite", choices=["retrieval", "latency", "synthesis"], default="retrieval")
     p.add_argument("--k", type=int, default=10)
     p.add_argument("--baseline", default=None)
     p.add_argument("--write-baseline", action="store_true")
@@ -170,6 +217,48 @@ def main() -> int:
             "k": args.k,
             "metrics": metrics,
             "latency": latency_results,
+            "baseline_ref": baseline_ref,
+            "gate": gate_result,
+        }
+        json_path, md_path = write_reports(REPO, result)
+        print(f"report: {os.path.relpath(md_path, REPO)}  ({os.path.relpath(json_path, REPO)})")
+        if gate_result is not None:
+            verdict = "PASS" if gate_result["pass"] else "FAIL"
+            print(f"GATE: {verdict}")
+            return 0 if gate_result["pass"] else 1
+        return 0
+
+    if args.suite == "synthesis":
+        if not os.path.exists(MAP_PATH):
+            print(f"ERROR: {MAP_PATH} missing — run with --reseed", file=sys.stderr)
+            return 2
+        qa = load_json(QA_PATH)
+        mem_map = load_json(MAP_PATH)
+        user = os.environ.get("RETAINDB_USER") or mem_map["user"]
+        per_question = run_synthesis(qa, user)
+        n = len(per_question) or 1
+        metrics = {
+            "synthesis_score": sum(q["judge_score"] for q in per_question) / n,
+            "anchor_coverage": sum(q["anchor_coverage"] for q in per_question) / n,
+        }
+        print(f"\nMean synthesis score: {metrics['synthesis_score']:.3f} over {len(per_question)} questions")
+        baseline_path = args.baseline or BASELINE_PATH
+        gate_result = None
+        baseline_ref = None
+        if args.write_baseline:
+            dated = write_baseline(metrics, per_question)
+            print(f"baseline written: {os.path.relpath(dated, REPO)}")
+        elif os.path.exists(baseline_path):
+            baseline = load_json(baseline_path)
+            gate_result = compare(metrics, baseline.get("metrics", baseline), load_gates(args.config), k=args.k)
+            baseline_ref = os.path.relpath(baseline_path, REPO).replace("\\", "/")
+        result = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "profile": args.profile,
+            "suite": "synthesis",
+            "k": args.k,
+            "metrics": metrics,
+            "per_question": per_question,
             "baseline_ref": baseline_ref,
             "gate": gate_result,
         }

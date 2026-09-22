@@ -67,9 +67,11 @@ function maxOutputTokensParam(model: string, maxTokens: number) {
 export async function judgeAnswer(p: JudgeInput): Promise<JudgeResult> {
   const model = llmCfg.dialectic.model;
   const client = getLLMClient(llmCfg.dialectic);
+  // Reasoning models (deepseek-v4-pro/flash, gpt-5) count reasoning against
+  // max_tokens, so a small budget yields an empty content — use a generous one.
   const response = await client.chat.completions.create({
     model,
-    ...maxOutputTokensParam(model, 300),
+    ...maxOutputTokensParam(model, 800),
     temperature: 0,
     response_format: { type: "json_object" },
     messages: [

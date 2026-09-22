@@ -54,7 +54,9 @@ def main() -> int:
     p.add_argument("--n", type=int, required=True, help="pool size (number of memories)")
     p.add_argument("--user", default=None, help="target user (default latency-pool-<n>)")
     p.add_argument("--project", default="default")
-    p.add_argument("--batch", type=int, default=500, help="memories per bulk request (max 1000)")
+    p.add_argument("--batch", type=int, default=100, help="memories per bulk request (max 1000)")
+    p.add_argument("--write-mode", choices=["sync", "async"], default="sync",
+                   help="sync (inline, reliable) or async (needs a working ingestion_jobs)")
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--wait-seconds", type=int, default=30, help="wait for async writes to settle")
     args = p.parse_args()
@@ -73,8 +75,8 @@ def main() -> int:
         r = requests.post(BASE + "/v1/memory/bulk", headers=H, json={
             "project": args.project,
             "memories": memories,
-            "write_mode": "async",
-        }, timeout=180)
+            "write_mode": args.write_mode,
+        }, timeout=300)
         if r.status_code not in (200, 201, 202):
             print(f"FAIL batch {start}: {r.status_code} {r.text[:160]}", file=sys.stderr)
             return 1
