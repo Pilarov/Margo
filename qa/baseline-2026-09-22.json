@@ -1,19 +1,19 @@
 {
-  "timestamp": "2026-09-22T12:52:24.696020+00:00",
+  "timestamp": "2026-09-22T13:17:34.193672+00:00",
   "metrics": {
     "recall@10": 0.9365079365079364,
     "precision@10": 0.13809523809523816,
     "mrr": 0.6280234315948602,
     "ndcg@10": 0.6782572313674193,
-    "synthesis_score": 0.4919047619047619,
-    "anchor_coverage": 0.611111111111111
+    "synthesis_score": 0.46,
+    "anchor_coverage": 0.4841269841269841
   },
   "per_question": [
     {
       "id": "q-format",
-      "judge_score": 1.0,
-      "judge_correct": true,
-      "anchor_coverage": 1.0
+      "judge_score": 0.33,
+      "judge_correct": false,
+      "anchor_coverage": 0.3333333333333333
     },
     {
       "id": "q-deploy-process",
@@ -31,7 +31,7 @@
       "id": "q-deploy-constraint",
       "judge_score": 0.0,
       "judge_correct": false,
-      "anchor_coverage": 1.0
+      "anchor_coverage": 0.0
     },
     {
       "id": "q-goals",
@@ -109,7 +109,7 @@
       "id": "q-deploy-strategy",
       "judge_score": 0.0,
       "judge_correct": false,
-      "anchor_coverage": 1.0
+      "anchor_coverage": 0.0
     },
     {
       "id": "q-outage",
