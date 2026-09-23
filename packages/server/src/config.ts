@@ -278,3 +278,30 @@ export const telemetry: TelemetryConfig = {
     enabled: bool(process.env.TELEMETRY_DROPOFF_ENABLED, jDropOff.enabled ?? true),
   },
 };
+
+// ── Retrieval config (ADR-006/007) ──────────────────────────────────────────
+// ANN index tuning. Recall of IVFFlat with the default probes=1 collapses as
+// the corpus grows (TD-001); HNSW keeps recall flat across N.
+const jRetrieval = (json.retrieval ?? {}) as Record<string, any>;
+const jAnn = (jRetrieval.ann ?? {}) as Record<string, any>;
+
+export interface RetrievalConfig {
+  ann: {
+    type: "hnsw" | "ivfflat";
+    /** HNSW search breadth (higher = better recall, slower). */
+    efSearch: number;
+    /** IVFFlat lists probed per query. */
+    probes: number;
+    /** Below this corpus size the planner may prefer a seq scan anyway. */
+    seqScanThreshold: number;
+  };
+}
+
+export const retrieval: RetrievalConfig = {
+  ann: {
+    type: (str(process.env.ANN_INDEX_TYPE, jAnn.type) || "hnsw") as "hnsw" | "ivfflat",
+    efSearch: num(process.env.HNSW_EF_SEARCH, jAnn.efSearch) ?? 100,
+    probes: num(process.env.IVFFLAT_PROBES, jAnn.probes) ?? 10,
+    seqScanThreshold: num(process.env.ANN_SEQ_SCAN_THRESHOLD, jAnn.seqScanThreshold) ?? 2000,
+  },
+};

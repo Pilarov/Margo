@@ -13,11 +13,14 @@ ALTER TABLE "memories" ALTER COLUMN "embedding" TYPE vector(1024);
 ALTER TABLE "chunks"   ALTER COLUMN "embedding" TYPE vector(1024);
 ALTER TABLE "entities" ALTER COLUMN "embedding" TYPE vector(1024);
 
+-- ANN index (TD-001): HNSW keeps recall flat as the corpus grows, unlike
+-- IVFFlat with the default probes=1. Search breadth is set per-query from
+-- config (retrieval.ann.efSearch) in db/vector access.
 CREATE INDEX IF NOT EXISTS "memories_embedding_idx"
-  ON "memories" USING ivfflat ("embedding" vector_cosine_ops) WITH (lists = 100);
+  ON "memories" USING hnsw ("embedding" vector_cosine_ops) WITH (m = 16, ef_construction = 64);
 
 CREATE INDEX IF NOT EXISTS "chunks_embedding_idx"
-  ON "chunks" USING ivfflat ("embedding" vector_cosine_ops) WITH (lists = 100);
+  ON "chunks" USING hnsw ("embedding" vector_cosine_ops) WITH (m = 16, ef_construction = 64);
 
 CREATE INDEX IF NOT EXISTS "entities_embedding_idx"
-  ON "entities" USING ivfflat ("embedding" vector_cosine_ops) WITH (lists = 100);
+  ON "entities" USING hnsw ("embedding" vector_cosine_ops) WITH (m = 16, ef_construction = 64);

@@ -18,6 +18,7 @@ import { calculateTemporalRelevance } from "./temporal.js";
 import { getFromSemanticCache, setInSemanticCache, getFromCache, setInCache } from "../cache.js";
 import type { MemoryScopeTarget, MemorySearchDiagnostics, MemorySearchParams, MemorySearchResult, MemoryStage } from "./types.js";
 import { recordSearchTelemetry } from "../telemetry/collector.js";
+import { retrieval as retrievalCfg } from "../../config.js";
 import { Prisma } from "@prisma/client";
 import { decrypt } from "../../lib/encryption.js";
 
@@ -618,7 +619,15 @@ async function vectorSearchMemories(params: {
   const embeddingLiteral = Prisma.raw(`'[${embedding.join(",")}]'::vector`);
   const limitLiteral = Prisma.raw(String(Math.min(Math.max(1, Math.floor(limit)), 1000)));
 
-  const results = await db.$queryRaw(Prisma.sql`
+  const results = await db.$transaction(async (tx: any) => {
+    // ANN recall tuning (TD-001): set the search breadth for this query's
+    // connection. set_config(..., true) is transaction-local.
+    if (retrievalCfg.ann.type === "hnsw") {
+      await tx.$executeRaw`SELECT set_config('hnsw.ef_search', ${String(retrievalCfg.ann.efSearch)}, true)`;
+    } else {
+      await tx.$executeRaw`SELECT set_config('ivfflat.probes', ${String(retrievalCfg.ann.probes)}, true)`;
+    }
+    return tx.$queryRaw(Prisma.sql`
     SELECT
       id,
       content,
@@ -645,6 +654,7 @@ async function vectorSearchMemories(params: {
     ORDER BY embedding <=> ${embeddingLiteral}
     LIMIT ${limitLiteral}
   `);
+  });
 
   return (results as any[]).map((r) => ({
     ...r,

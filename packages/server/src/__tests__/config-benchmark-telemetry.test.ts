@@ -58,3 +58,18 @@ describe("telemetry config (ADR-011)", () => {
     expect(telemetry.collector.enabled).toBe(false);
   });
 });
+
+describe("retrieval/ANN config (TD-001)", () => {
+  it("defaults to hnsw with efSearch 100", async () => {
+    const { retrieval } = await loadConfigWithEnv({});
+    expect(retrieval.ann.type).toBe("hnsw");
+    expect(retrieval.ann.efSearch).toBe(100);
+    expect(retrieval.ann.probes).toBe(10);
+  });
+
+  it("reads env overrides", async () => {
+    const { retrieval } = await loadConfigWithEnv({ ANN_INDEX_TYPE: "ivfflat", IVFFLAT_PROBES: "25" });
+    expect(retrieval.ann.type).toBe("ivfflat");
+    expect(retrieval.ann.probes).toBe(25);
+  });
+});
