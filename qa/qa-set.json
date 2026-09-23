@@ -147,6 +147,244 @@
       "answer": "Under 100 kilobytes",
       "reference_slugs": ["bundle-size-goal"],
       "anchors": ["100"]
+    },
+    {
+      "id": "q-admin-access",
+      "question": "How is admin access controlled?",
+      "answer": "Role-based access control",
+      "reference_slugs": ["rbac-admin"],
+      "anchors": ["role", "RBAC"]
+    },
+    {
+      "id": "q-mfa",
+      "question": "Is multi-factor authentication required for production access?",
+      "answer": "Yes, MFA is required",
+      "reference_slugs": ["mfa-required"],
+      "anchors": ["MFA", "multi-factor"]
+    },
+    {
+      "id": "q-encryption",
+      "question": "What encryption protects customer data at rest?",
+      "answer": "AES-256 encryption",
+      "reference_slugs": ["encryption-at-rest"],
+      "anchors": ["AES"]
+    },
+    {
+      "id": "q-pentest",
+      "question": "How often is an external penetration test run?",
+      "answer": "Annually",
+      "reference_slugs": ["pen-test-annual"],
+      "anchors": ["annual", "penetration"]
+    },
+    {
+      "id": "q-vuln-sla",
+      "question": "How quickly must critical vulnerabilities be patched?",
+      "answer": "Within 24 hours",
+      "reference_slugs": ["vuln-sla"],
+      "anchors": ["24", "critical"]
+    },
+    {
+      "id": "q-sso",
+      "question": "How do employees sign in?",
+      "answer": "Okta single sign-on",
+      "reference_slugs": ["sso-okta"],
+      "anchors": ["Okta", "SSO"]
+    },
+    {
+      "id": "q-system-record",
+      "question": "What is the system of record for data?",
+      "answer": "PostgreSQL",
+      "reference_slugs": ["postgres-primary"],
+      "anchors": ["PostgreSQL"]
+    },
+    {
+      "id": "q-schema-review",
+      "question": "Do database schema changes need a review?",
+      "answer": "Yes, a design review is required",
+      "reference_slugs": ["schema-review"],
+      "anchors": ["review", "schema"]
+    },
+    {
+      "id": "q-soft-delete",
+      "question": "How are records deleted?",
+      "answer": "Soft delete, never hard delete",
+      "reference_slugs": ["soft-delete"],
+      "anchors": ["soft delete"]
+    },
+    {
+      "id": "q-pii-tokenize",
+      "question": "How is sensitive data protected?",
+      "answer": "Tokenized in a separate vault",
+      "reference_slugs": ["pii-vault"],
+      "anchors": ["token", "vault"]
+    },
+    {
+      "id": "q-slo",
+      "question": "What is the service availability objective?",
+      "answer": "99.9 percent",
+      "reference_slugs": ["slo-availability"],
+      "anchors": ["99.9"]
+    },
+    {
+      "id": "q-alerts",
+      "question": "How are alerts delivered to engineers?",
+      "answer": "They page the on-call engineer",
+      "reference_slugs": ["alert-on-call"],
+      "anchors": ["on-call", "page"]
+    },
+    {
+      "id": "q-log-format",
+      "question": "What format are logs written in?",
+      "answer": "Structured JSON",
+      "reference_slugs": ["log-structured"],
+      "anchors": ["JSON", "structured"]
+    },
+    {
+      "id": "q-latency-measure",
+      "question": "How is latency measured?",
+      "answer": "At the 99th percentile",
+      "reference_slugs": ["latency-attr"],
+      "anchors": ["99", "percentile"]
+    },
+    {
+      "id": "q-canary",
+      "question": "How are risky changes rolled out?",
+      "answer": "With a canary deployment",
+      "reference_slugs": ["canary-deploy"],
+      "anchors": ["canary"]
+    },
+    {
+      "id": "q-rollback",
+      "question": "What must every release have?",
+      "answer": "A documented rollback plan",
+      "reference_slugs": ["rollback-plan"],
+      "anchors": ["rollback"]
+    },
+    {
+      "id": "q-db-migration-order",
+      "question": "When are database migrations run?",
+      "answer": "Before app deploy",
+      "reference_slugs": ["db-migration-first"],
+      "anchors": ["before", "migration"]
+    },
+    {
+      "id": "q-api-version",
+      "question": "How are APIs versioned?",
+      "answer": "In the URL path",
+      "reference_slugs": ["api-versioning"],
+      "anchors": ["version", "path"]
+    },
+    {
+      "id": "q-idempotency",
+      "question": "Do mutations accept idempotency keys?",
+      "answer": "Yes",
+      "reference_slugs": ["idempotency-keys"],
+      "anchors": ["idempotency"]
+    },
+    {
+      "id": "q-openapi",
+      "question": "How are APIs documented?",
+      "answer": "With OpenAPI",
+      "reference_slugs": ["openapi-spec"],
+      "anchors": ["OpenAPI"]
+    },
+    {
+      "id": "q-rfc",
+      "question": "What do cross-team changes require?",
+      "answer": "An RFC",
+      "reference_slugs": ["rfc-required"],
+      "anchors": ["RFC"]
+    },
+    {
+      "id": "q-postmortem",
+      "question": "What happens after every incident?",
+      "answer": "A blameless postmortem",
+      "reference_slugs": ["incident-postmortem"],
+      "anchors": ["blameless", "postmortem"]
+    },
+    {
+      "id": "q-k8s",
+      "question": "Where do production services run?",
+      "answer": "On a managed Kubernetes cluster",
+      "reference_slugs": ["k8s-cluster"],
+      "anchors": ["Kubernetes"]
+    },
+    {
+      "id": "q-iam",
+      "question": "What IAM principle is used everywhere?",
+      "answer": "Least privilege",
+      "reference_slugs": ["iam-least-privilege"],
+      "anchors": ["least", "privilege"]
+    },
+    {
+      "id": "q-pricing",
+      "question": "What pricing tiers exist?",
+      "answer": "Free, pro, and enterprise",
+      "reference_slugs": ["pricing-tier"],
+      "anchors": ["free", "pro", "enterprise"]
+    },
+    {
+      "id": "q-feature-flag",
+      "question": "How do new features ship?",
+      "answer": "Behind a feature flag",
+      "reference_slugs": ["feature-flag-required"],
+      "anchors": ["feature flag"]
+    },
+    {
+      "id": "q-contract-tests",
+      "question": "How are service contracts verified?",
+      "answer": "With contract tests",
+      "reference_slugs": ["contract-tests"],
+      "anchors": ["contract"]
+    },
+    {
+      "id": "q-coverage-gate",
+      "question": "What blocks a merge based on coverage?",
+      "answer": "Coverage below threshold",
+      "reference_slugs": ["coverage-gate"],
+      "anchors": ["coverage", "threshold"]
+    },
+    {
+      "id": "q-frontend-stack",
+      "question": "What is the frontend built with?",
+      "answer": "React and TypeScript",
+      "reference_slugs": ["react-stack"],
+      "anchors": ["React", "TypeScript"]
+    },
+    {
+      "id": "q-accessibility",
+      "question": "What accessibility standard does the UI meet?",
+      "answer": "WCAG",
+      "reference_slugs": ["a11y-wcag"],
+      "anchors": ["WCAG"]
+    },
+    {
+      "id": "q-sev1",
+      "question": "What is the severity 1 response time?",
+      "answer": "Within 15 minutes",
+      "reference_slugs": ["sev1-response"],
+      "anchors": ["15", "minutes"]
+    },
+    {
+      "id": "q-sla-uptime",
+      "question": "What uptime does the enterprise SLA guarantee?",
+      "answer": "99.9 percent",
+      "reference_slugs": ["sla-uptime"],
+      "anchors": ["99.9", "SLA"]
+    },
+    {
+      "id": "q-multi-az",
+      "question": "How is production made resilient across zones?",
+      "answer": "Runs across multiple availability zones",
+      "reference_slugs": ["multi-az"],
+      "anchors": ["availability", "zone"]
+    },
+    {
+      "id": "q-vpc",
+      "question": "Where do internal services live?",
+      "answer": "In a private VPC",
+      "reference_slugs": ["vpc-private"],
+      "anchors": ["VPC", "private"]
     }
   ]
 }

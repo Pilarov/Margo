@@ -15,3 +15,5 @@ qa/memory_map.json
 qa/bench-*.json
 __pycache__/
 *.pyc
+backups/
+*.dump

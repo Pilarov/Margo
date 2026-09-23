@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
-"""Seed Margo with *working* memories (памятивы) — NOT user facts.
+"""Seed Margo with working memories (памятивы) — NOT user facts.
 
-Margo stores durable working memory about the project/work: decisions, constraints,
-goals, procedures, corrections, and answer-style preferences. User identity,
-relationships, biography and dialogues live in other services.
-
-Each memory has a stable `slug` used to cross-reference the QA eval set. The
-seed writes `qa/memory_map.json` mapping slug -> memory_id so eval scripts can
-resolve ground-truth references.
+Reads the golden set from qa/golden-set.json and optionally injects hygiene
+memories from a separate file. Writes qa/memory_map.json (slug -> id) so eval
+scripts can resolve ground-truth references.
 
 Usage:
     RETAINDB_BASE_URL=http://localhost:3000 RETAINDB_API_KEY=margo-test-key \
       python3 scripts/seed-dialectic-data.py
+    # golden + all hygiene injections:
+    RETAINDB_BASE_URL=... python3 scripts/seed-dialectic-data.py --hygiene qa/hygiene-injections.json
+    # golden + first 100 hygiene injections:
+    RETAINDB_BASE_URL=... python3 scripts/seed-dialectic-data.py --hygiene qa/hygiene-injections.json --hygiene-n 100
 """
+import argparse
 import json
 import os
 import time
@@ -23,16 +24,13 @@ BASE = os.environ.get("RETAINDB_BASE_URL", "http://localhost:3000").rstrip("/")
 KEY = os.environ.get("RETAINDB_API_KEY", "margo-test-key")
 HERE = os.path.dirname(os.path.abspath(__file__))
 QA_PATH = os.path.join(HERE, "..", "qa", "qa-set.json")
+GOLDEN_PATH = os.path.join(HERE, "..", "qa", "golden-set.json")
 MAP_PATH = os.path.join(HERE, "..", "qa", "memory_map.json")
 H = {"Authorization": f"Bearer {KEY}", "Content-Type": "application/json"}
 
 
 def _qa_user() -> str:
-    """qa/qa-set.json is the single source of truth for the eval user.
-
-    eval-synthesis.py and eval-retrieval.py resolve the same user; keeping the
-    seed in sync prevents the synthesis eval from querying an empty profile.
-    """
+    """qa/qa-set.json is the single source of truth for the eval user."""
     try:
         with open(QA_PATH) as f:
             return json.load(f).get("user") or "working-memory-test-user"
@@ -40,27 +38,43 @@ def _qa_user() -> str:
         return "working-memory-test-user"
 
 
-USER = os.environ.get("RETAINDB_USER") or _qa_user()
+def load_memories(path: str) -> list:
+    with open(path) as f:
+        data = json.load(f)
+    memories = data.get("memories", [])
+    return memories
 
 
-def wait_until_indexed(timeout_s: int = 60) -> bool:
-    """Poll search until a seeded memory is retrievable.
+def post_memory(mem: dict, user: str) -> str | None:
+    r = requests.post(BASE + "/v1/memory", headers=H, json={
+        "project": "default",
+        "content": mem["content"],
+        "memory_type": mem.get("memory_type", "factual"),
+        "user_id": user,
+        "importance": mem.get("importance", 0.5),
+        "entity_mentions": mem.get("entity_mentions", []),
+        "write_mode": "sync",
+    }, timeout=60)
+    if r.status_code in (200, 201):
+        body = r.json()
+        return (body.get("memory") or {}).get("id") or body.get("memory_id")
+    print(f"FAIL {mem.get('slug', '?')}: {r.status_code} {r.text[:120]}")
+    return None
 
-    Writes can be accepted before the embedding worker has indexed them; a
-    benchmark run started immediately after seeding would then see recall 0.
-    """
+
+def wait_until_indexed(slug_to_id: dict, memories: list, user: str, timeout_s: int = 90) -> bool:
     if not slug_to_id:
         return False
     sample_slug = next(iter(slug_to_id))
     sample_id = slug_to_id[sample_slug]
-    content = next((c for s, c, *_ in MEMORIES if s == sample_slug), None)
+    content = next((m["content"] for m in memories if m.get("slug") == sample_slug), None)
     if not content:
         return False
     deadline = time.time() + timeout_s
     while time.time() < deadline:
         try:
             r = requests.post(BASE + "/v1/memory/search", headers=H, json={
-                "project": "default", "query": content, "user_id": USER,
+                "project": "default", "query": content, "user_id": user,
                 "top_k": 50, "include_pending": True,
             }, timeout=30)
             ids = [x.get("memory", {}).get("id") for x in (r.json() or {}).get("results", [])]
@@ -71,101 +85,44 @@ def wait_until_indexed(timeout_s: int = 60) -> bool:
         time.sleep(2)
     return False
 
-# (slug, content, memory_type, importance, entity_mentions)
-MEMORIES = [
-    # ── Cluster A: architecture / decisions / constraints (HIGH importance) ──
-    ("go-backend", "Standardized the backend on Go", "decision", 0.8, ["Go"]),
-    ("grpc-comms", "Chose gRPC for service-to-service communication", "decision", 0.75, ["gRPC"]),
-    ("pnpm-monorepo", "Monorepo is managed with pnpm workspaces", "factual", 0.7, ["pnpm"]),
-    ("postgres-pgvector", "Primary datastore is PostgreSQL with pgvector", "factual", 0.7, ["PostgreSQL", "pgvector"]),
-    ("aws-only", "Deployment must stay on AWS", "constraint", 0.8, ["AWS"]),
-    ("prom-grafana", "Observability stack is Prometheus and Grafana", "factual", 0.7, ["Prometheus", "Grafana"]),
-    ("terraform-infra", "Infrastructure is defined with Terraform", "decision", 0.75, ["Terraform"]),
-    ("gh-actions", "CI/CD runs on GitHub Actions", "factual", 0.7, ["GitHub Actions"]),
-    ("rate-limit", "API rate limit is 1000 requests per minute", "constraint", 0.8, []),
-    ("secrets-manager", "Secrets are stored in AWS Secrets Manager", "factual", 0.65, ["AWS"]),
-    ("review-before-merge", "Code review is required before merge", "instruction", 0.8, []),
-    ("launchdarkly", "Feature flags are managed with LaunchDarkly", "decision", 0.7, ["LaunchDarkly"]),
 
-    # ── Cluster B: how to work / how to answer (LOW importance) ──────────────
-    ("concise-answers", "Prefers concise bullet-point answers", "preference", 0.3, []),
-    ("no-emojis", "No emojis in technical output", "preference", 0.35, []),
-    ("code-snippets", "Likes code snippets over prose explanations", "preference", 0.4, []),
-    ("line-length-80", "Prefers a maximum line length of 80 characters", "preference", 0.4, []),
-    ("error-examples", "Prefers error messages to include code examples", "preference", 0.4, []),
-    ("tests-before-push", "Always run tests before pushing", "instruction", 0.5, []),
-    ("changelog-entry", "Add a changelog entry with every merge", "instruction", 0.45, []),
-    ("deploy-fridays", "Deploy to production only on Fridays", "workflow", 0.45, []),
-    ("semver", "Release process uses semantic versioning", "workflow", 0.5, []),
-    ("pnpm-over-npm", "Previously used npm, now standardized on pnpm", "correction", 0.45, ["pnpm"]),
-    ("typed-schemas", "Prefers typed schemas in API responses", "preference", 0.45, []),
-    ("no-abbreviations", "Avoids abbreviations in documentation", "preference", 0.35, []),
+def main() -> int:
+    p = argparse.ArgumentParser(description="Seed Margo with golden set (+ hygiene)")
+    p.add_argument("--golden", default=GOLDEN_PATH)
+    p.add_argument("--hygiene", default=None, help="path to hygiene-injections.json")
+    p.add_argument("--hygiene-n", type=int, default=None, help="inject only the first N hygiene memories")
+    p.add_argument("--user", default=None)
+    args = p.parse_args()
 
-    # ── Goals / project state / solutions (mixed importance) ─────────────────
-    ("goal-microservices", "Migrate the monolith to microservices by Q3", "goal", 0.8, []),
-    ("goal-latency", "Reduce p99 latency below 100 milliseconds", "goal", 0.7, []),
-    ("state-beta", "Currently in beta phase", "project_state", 0.6, []),
-    ("state-migration-blocker", "Main blocker is the database migration", "project_state", 0.6, []),
-    ("solution-memleak", "Resolved the memory leak with a connection pool", "solution", 0.6, []),
-    ("correction-wed-fri", "Previously deployed on Wednesdays, now on Fridays", "correction", 0.5, []),
+    user = args.user or os.environ.get("RETAINDB_USER") or _qa_user()
 
-    # ── Security / operations ───────────────────────────────────────────────
-    ("no-secrets-in-logs", "Never log secrets or credentials", "constraint", 0.75, []),
-    ("rotate-keys-monthly", "Rotate API keys every month", "instruction", 0.6, []),
-    ("no-weekend-deploys", "No production deploys on weekends", "constraint", 0.7, []),
-    ("blue-green-deploy", "Uses blue-green deployment strategy", "decision", 0.65, []),
-    ("outage-fix", "Resolved the billing outage with a circuit breaker", "solution", 0.6, []),
-    ("redis-cache", "Uses Redis for caching hot data", "factual", 0.65, ["Redis"]),
+    memories = load_memories(args.golden)
+    if args.hygiene:
+        hygiene = load_memories(args.hygiene)
+        if args.hygiene_n is not None:
+            hygiene = hygiene[: args.hygiene_n]
+        memories = memories + hygiene
 
-    # ── Testing / documentation ─────────────────────────────────────────────
-    ("jest-unit-tests", "Standardized on Jest for unit tests", "decision", 0.7, ["Jest"]),
-    ("coverage-80", "Requires 80 percent test coverage", "constraint", 0.65, []),
-    ("tdd-approach", "Prefers test-driven development", "preference", 0.5, []),
-    ("readme-required", "Every repository must have a README", "instruction", 0.6, []),
-    ("document-apis", "Document public APIs with examples", "instruction", 0.6, []),
-
-    # ── Integrations ────────────────────────────────────────────────────────
-    ("stripe-api", "Payment processing uses the Stripe API", "factual", 0.7, ["Stripe"]),
-    ("sendgrid-email", "Transactional email uses SendGrid", "factual", 0.6, ["SendGrid"]),
-
-    # ── More preferences / workflows / corrections ──────────────────────────
-    ("async-first", "Prefers asynchronous communication over meetings", "preference", 0.4, []),
-    ("standup-daily", "Daily standup happens at 9am", "workflow", 0.5, []),
-    ("pr-small", "Prefers pull requests under 300 lines", "preference", 0.45, []),
-    ("node-to-go", "Previously used Node.js for services, now Go", "correction", 0.5, ["Node.js", "Go"]),
-    ("goal-multi-region", "Goal: deploy to multiple regions by end of year", "goal", 0.65, []),
-    ("state-production", "The billing service is in production", "project_state", 0.6, []),
-    ("state-migrating-auth", "Currently migrating the auth service", "project_state", 0.55, []),
-    ("bundle-size-goal", "Goal: keep the frontend bundle under 100 kilobytes", "goal", 0.6, []),
-]
-
-slug_to_id = {}
-count = 0
-for slug, content, memory_type, importance, entities in MEMORIES:
-    r = requests.post(BASE + "/v1/memory", headers=H, json={
-        "project": "default",
-        "content": content,
-        "memory_type": memory_type,
-        "user_id": USER,
-        "importance": importance,
-        "entity_mentions": entities,
-        "write_mode": "sync",
-    }, timeout=60)
-    if r.status_code in (200, 201):
-        body = r.json()
-        mid = (body.get("memory") or {}).get("id") or body.get("memory_id")
+    slug_to_id = {}
+    count = 0
+    for mem in memories:
+        slug = mem.get("slug") or mem["content"][:24]
+        mid = post_memory(mem, user)
         if mid:
             slug_to_id[slug] = mid
             count += 1
-    else:
-        print(f"FAIL {slug}: {r.status_code} {r.text[:120]}")
 
-os.makedirs(os.path.dirname(MAP_PATH), exist_ok=True)
-with open(MAP_PATH, "w") as f:
-    json.dump({"user": USER, "slugs": slug_to_id}, f, indent=2)
+    os.makedirs(os.path.dirname(MAP_PATH), exist_ok=True)
+    with open(MAP_PATH, "w") as f:
+        json.dump({"user": user, "slugs": slug_to_id}, f, indent=2)
 
-print(f"\nSeeded {count}/{len(MEMORIES)} working memories for {USER}")
-print(f"Memory map written to {MAP_PATH}")
+    print(f"\nSeeded {count}/{len(memories)} working memories for {user}")
+    print(f"Memory map written to {MAP_PATH}")
 
-ready = wait_until_indexed()
-print(f"Indexing: {'ready' if ready else 'TIMEOUT (search may return 0)'}")
+    ready = wait_until_indexed(slug_to_id, memories, user)
+    print(f"Indexing: {'ready' if ready else 'TIMEOUT (search may return 0)'}")
+    return 0 if ready else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
