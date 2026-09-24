@@ -53,7 +53,10 @@ def main() -> int:
     p = argparse.ArgumentParser(description="Generate a synthetic latency pool")
     p.add_argument("--n", type=int, required=True, help="pool size (number of memories)")
     p.add_argument("--user", default=None, help="target user (default latency-pool-<n>)")
-    p.add_argument("--project", default="default")
+    # TD-002: latency pools must live in their own project, never in `default`
+    # (the golden corpus project) — otherwise a latency run re-pollutes the
+    # retrieval baseline through the shared ANN index.
+    p.add_argument("--project", default="distractor")
     p.add_argument("--batch", type=int, default=100, help="memories per bulk request (max 1000)")
     p.add_argument("--write-mode", choices=["sync", "async"], default="sync",
                    help="sync (inline, reliable) or async (needs a working ingestion_jobs)")

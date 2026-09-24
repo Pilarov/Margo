@@ -1,6 +1,6 @@
 {
   "user_template": "latency-pool-{n}",
-  "project": "default",
+  "project": "distractor",
   "warmup": 5,
   "repeats": 20,
   "pools": [
