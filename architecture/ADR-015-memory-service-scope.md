@@ -61,6 +61,11 @@ Margo отвечает на вопрос «что система помнит о
 (см. §Implementation Impact). Для внешних потребителей это breaking: `QueryResult`/`context.query` в SDK,
 payload MCP, `search_documents` в research-agent уходят — фиксируется версией SDK, а не «тихо живёт».
 
+**4a. Очередь ingestion остаётся.** `engine/ingestion-queue.ts` и таблица `ingestion_jobs` обслуживают
+**и памяти**: `createJob({documents, memories, conversations})` — это async-путь записи памятей
+(`/v1/memories`, `api/memory.ts`). Вырезается только документная ветка очереди (документы, sync источников,
+чанкинг), сама очередь и её таблица в шаг 5 (DROP) **не входят**.
+
 **5. Остаётся без изменений:** write-path и one-pass экстракция (ADR-002), Dreamer (ADR-003), hygiene
 (ADR-009), benchmarking и гейт (ADR-010), телеметрия (ADR-011), провайдеры (ADR-012 — кроме
 cross-encoder-реранка, см. ниже), memory-retrieval с окном (ADR-013 в memory-части), шаги ADR-014 — только
@@ -74,7 +79,7 @@ memory-часть.
 |---|---|
 | Движок документов | `engine/retriever.ts`, `compressor.ts`, `chunker.ts`, `ingestion-profiles.ts`, `ingest.ts`, `ingestion-queue.ts`, `oracle-select.ts` |
 | Коннекторы | `connectors/*` — 22 файла (github, gitlab, huggingface, notion, confluence, slack, discord, pdf, video, web, sitemap, url, arxiv, npm_package, pypi_package, dataset, database, html-structure, api_spec, playwright, text, github-tarball) |
-| Эндпоинты | `/v1/context/query` (`routes.ts:956`), 11 маршрутов `/v1/sources/*` (`routes.ts:1672–2273+`), ingestion-часть (`routes.ts:663–827`) |
+| Эндпоинты | `POST /v1/context/query`; `POST /v1/index`, `/v1/index/bundle`; `POST /v1/learn`, `/v1/learn/batch`; 11 маршрутов `/v1/sources/*` + `/v1/sync-jobs/*` + `github-tarball` + `POST /v1/projects/:projectId/ingest`; `GET /v1/jobs/:jobId`; admin ops `queues`/`connectors`/`sources`; `POST /v1/admin/sources/rehydrate`; документные счётчики в `GET /v1/projects/:id/stats` |
 | Схема | Prisma `Source:51`, `SourceVersion:87`, `Document:124`, `Chunk:163`, `ChunkMemory:293`, `IngestionJob:443` |
 | Контракты и охрана | `contracts/registry.mjs`, `security/route-controls.ts`, `api/app.ts`, `__tests__/hermes-contract.test.ts` |
 | Клиенты | SDK (`index.ts:864`, `whisper.ts:852`, `core/client.ts:24`), MCP-payload, research-agent (`search_documents`) |
@@ -87,7 +92,7 @@ memory-часть.
 2. **Memory-путь чистого листа**: убрать `injectSourceChunks` и `ChunkMemory` из memory-пути; локатор источника — строкой в памяти. Приёмка: memory-тесты зелёные, `recall@10` = 0.787 против `qa/baseline-2026-09-24.json`.
 3. **Эндпоинты**: удалить `/v1/context/query` и `/v1/sources/*`; обновить реестр контрактов, `route-controls`, `app.ts`, контрактный тест.
 4. **Движок и коннекторы**: удалить 7 модулей и 22 коннектора + их тесты.
-5. **Схема (destructive, отдельным шагом)**: миграция `DROP` для шести моделей; перед шагом — дамп БД; приёмка — `prisma validate` + сервер поднимается, memory-эндпоинты отвечают.
+5. **Схема (destructive, отдельным шагом)**: миграция `DROP` для пяти моделей — `Source`, `SourceVersion`, `Document`, `Chunk`, `ChunkMemory` (**`IngestionJob` остаётся**: очередь обслуживает async-запись памятей); перед шагом — дамп БД; приёмка — `prisma validate` + сервер поднимается, memory-эндпоинты отвечают.
 6. **Клиенты**: SDK/MCP/local/research-agent.
 7. **Гигиена**: скрипты ingestion-сидов, документация (AGENTS.md — только с согласия пользователя); TD-003 закрыть как «снят удалением», TD-010 сократить по факту.
 

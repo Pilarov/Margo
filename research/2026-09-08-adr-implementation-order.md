@@ -104,9 +104,9 @@ ADR-010, и только шаг 5 является destructive.
 |---|---|---|
 | 1 | Граница: `ADR-015` + план + пометки в ADR-007/013/014 | ADR на месте, план без documents-пунктов |
 | 2 | Memory-путь чистого листа: убрать `injectSourceChunks`, `ChunkMemory` и чанковые метаданные. Подсказка об источнике (что/где/когда) остаётся контентом памяти и проходит общий путь — типизация, скоуп, validity, фильтрация, модерация | memory-тесты зелёные, `recall@10` = 0.787 против P1-файла |
-| 3 | Эндпоинты: `/v1/context/query` + 11 маршрутов `/v1/sources/*` + ingestion-часть | контрактный тест и `route-controls` обновлены, гейт PASS |
-| 4 | Движок: 7 модулей (`retriever`, `compressor`, `chunker`, `ingestion-profiles`, `ingest`, `ingestion-queue`, `oracle-select`) + 22 коннектора + их тесты | сборка и память зелёные |
-| 5 | Схема (destructive): `DROP` для `Source`, `SourceVersion`, `Document`, `Chunk`, `ChunkMemory`, `IngestionJob` | дамп БД сделан, `prisma validate`, сервер поднимается |
+| 3 | Эндпоинты: `/v1/context/query`, `/v1/index(+bundle)`, `/v1/learn(+batch)`, 11 `/v1/sources/*`, `/v1/sync-jobs/*`, `github-tarball`, `/v1/jobs/:jobId`, admin ops queues/connectors/sources, rehydrate (сделано для `routes.ts`; остаются модули `context.ts`, `files.ts`, `research-agent.ts`, `search.ts`, `app.ts`, реестр контрактов, `route-controls`) | контрактный тест и `route-controls` обновлены, гейт PASS |
+| 4 | Движок: 7 модулей (`retriever`, `compressor`, `chunker`, `ingestion-profiles`, `ingest`, `oracle-select` + документная ветка `ingestion-queue`) + 22 коннектора + их тесты. **Очередь и `ingestion_jobs` остаются** — async-запись памятей | сборка и память зелёные |
+| 5 | Схема (destructive): `DROP` для `Source`, `SourceVersion`, `Document`, `Chunk`, `ChunkMemory` (**без `IngestionJob`**) | дамп БД сделан, `prisma validate`, сервер поднимается |
 | 6 | Клиенты: SDK (`QueryResult`), MCP-payload, `packages/local`, research-agent (`search_documents`) | SDK-тесты зелёные, версия помечена |
 | 7 | Гигиена: ingestion-сиды, документация, TD-003 закрыть как «снят удалением», TD-010 сократить | grep-критерий ADR-015 выполняется |
 
