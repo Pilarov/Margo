@@ -1079,6 +1079,10 @@ api.post(
         region: DEPLOY_REGION,
         consistency_state: consistencyState,
         timing: result.meta.timing,
+        // Per-layer funnels are rebuilt field-by-field here, so a new meta field must be
+        // threaded explicitly (ADR-014 step 1 / TD-011 sub-finding: the API boundary is
+        // where telemetry quietly disappears).
+        layers: result.meta.layers,
       },
     });
   }
@@ -3649,4 +3653,4 @@ api.post(
 );
 
 // ─── SimpleClaw Provisioning (Admin only) ────────────────────
-
+

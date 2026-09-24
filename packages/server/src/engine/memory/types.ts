@@ -139,6 +139,16 @@ export interface MemoryStage {
   in: number;
   /** Candidates surviving the stage. */
   out: number;
+  /**
+   * Per-layer detail (ADR-014 step 1 / ADR-011 §1): how many candidates the layer
+   * dropped, how long it took, and the window it applied. Optional — a stage that does not
+   * report them keeps working, and the collector falls back to `in - out`. `dropped` is
+   * clamped at 0 for a trace (a drop cannot be negative); the funnel's `avg_dropped` is the
+   * net change, so a layer that adds candidates shows a negative value there.
+   */
+  dropped?: number;
+  ms?: number;
+  cutoff?: number;
 }
 
 export interface MemorySearchDiagnostics {

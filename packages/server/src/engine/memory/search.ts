@@ -20,6 +20,7 @@ import type { MemoryScopeTarget, MemorySearchDiagnostics, MemorySearchParams, Me
 import { recordSearchTelemetry } from "../telemetry/collector.js";
 import { retrieval as retrievalCfg, type WindowLayerConfig } from "../../config.js";
 import { selectWindow } from "../retrieval/window-selector.js";
+import { createLayerTracer } from "../retrieval/trace.js";
 import { Prisma } from "@prisma/client";
 import { decrypt } from "../../lib/encryption.js";
 
@@ -268,7 +269,10 @@ export async function searchMemories(
   params: MemorySearchParams
 ): Promise<MemorySearchResult[]> {
   const timings: TimingLog[] = [];
-  const stages: MemoryStage[] = [];
+  // Per-layer traces (ADR-014 step 1): the funnel speaks S0–S3 now. The numbers are the
+  // ones the pipeline already computes (plus a Date.now() pair per layer) and the result
+  // is untouched, so behaviour is unchanged by construction.
+  const tracer = createLayerTracer();
   const startTotal = Date.now();
   const disableLatencyDegradation = shouldDisableLatencyDegradation(params);
 
@@ -311,7 +315,7 @@ export async function searchMemories(
     timings.push({ step: "TOTAL", duration: total });
     logTimings(timings, query);
     console.log("⚡ Simple cache hit");
-    emitDiagnostics(params, timings, total, cacheHitType, effectiveFastMode, stages);
+    emitDiagnostics(params, timings, total, cacheHitType, effectiveFastMode, tracer.stages());
     return simpleCached;
   }
 
@@ -332,7 +336,7 @@ export async function searchMemories(
     const total = Date.now() - startTotal;
     timings.push({ step: "TOTAL", duration: total });
     logTimings(timings, query);
-    emitDiagnostics(params, timings, total, cacheHitType, effectiveFastMode, stages);
+    emitDiagnostics(params, timings, total, cacheHitType, effectiveFastMode, tracer.stages());
     return results;
   }
 
@@ -360,16 +364,20 @@ export async function searchMemories(
     tags,
     limit: recallWindow.max, // fetch up to the window cap, cut by selector below
   });
-  timings.push({ step: "vector_search", duration: Date.now() - vectorStart });
-  stages.push({ name: "vector", in: recallWindow.max, out: semanticResults.length });
+  const vectorMs = Date.now() - vectorStart;
+  timings.push({ step: "vector_search", duration: vectorMs });
+  // S0 and the semantic fetch share this row in the memory path: scope/validity are
+  // predicates inside the ANN query, so there is no separate candidate-level drop to report
+  // yet. Этап 5 шаг 2 (ADR-014) moves them into scope-filter.ts and splits the row.
+  tracer.record({ layer: "S0.scope", in: recallWindow.max, out: semanticResults.length, ms: vectorMs });
   // Dynamic window (ADR-013): cut the vector candidates by the configured strategy
   // (curvature / median-gap / relative-top / fixed) instead of a hard topK*3, and on the
   // scope-boosted ranking the rest of the pipeline sees (review I4).
+  const cutStart = Date.now();
   const recallCut = __cutRecallWindow(semanticResults, recallWindow, { userId, sessionId, agentId, taskId });
   const scopedSemanticResults = recallCut.kept;
-  // Publish the chosen window (review M1): without it the funnel only hinted at the cut
-  // through the next stage's `in`.
-  stages.push({ name: "window_recall", in: recallCut.in, out: recallCut.k });
+  // The window the selector chose is published (ADR-013 / review M1): `cutoff` carries k.
+  tracer.record({ layer: "S1.window", in: recallCut.in, out: recallCut.k, ms: Date.now() - cutStart, cutoff: recallCut.k });
 
   // Type-aware recall boost: when the query asks for a specific memory type, also
   // pull that type directly so semantic gaps (e.g. "goals" vs "Reduce p99 latency")
@@ -387,6 +395,7 @@ export async function searchMemories(
             : queryIntent.asksForWorkflows
               ? ["workflow"]
               : null;
+  const typeRecallStart = Date.now();
   const beforeTypeRecall = scopedSemanticResults.length;
   if (typeRecallTypes && userId) {
     const typeMemories = await db.memory.findMany({
@@ -429,7 +438,7 @@ export async function searchMemories(
       });
     }
   }
-  stages.push({ name: "type_recall", in: beforeTypeRecall, out: scopedSemanticResults.length });
+  tracer.record({ layer: "S1.type_recall", in: beforeTypeRecall, out: scopedSemanticResults.length, ms: Date.now() - typeRecallStart });
 
   // Guardrail: if we're already over budget after vector search, degrade to fast mode.
   if (!disableLatencyDegradation && !effectiveFastMode && Date.now() - startTotal > POST_VECTOR_BUDGET_MS) {
@@ -443,7 +452,7 @@ export async function searchMemories(
     const total = Date.now() - startTotal;
     timings.push({ step: "TOTAL", duration: total });
     logTimings(timings, query);
-    emitDiagnostics(params, timings, total, cacheHitType, effectiveFastMode, stages);
+    emitDiagnostics(params, timings, total, cacheHitType, effectiveFastMode, tracer.stages());
     return [];
   }
 
@@ -459,13 +468,14 @@ export async function searchMemories(
     const total = Date.now() - startTotal;
     timings.push({ step: "TOTAL", duration: total });
     logTimings(timings, query);
-    emitDiagnostics(params, timings, total, cacheHitType, effectiveFastMode, stages);
+    emitDiagnostics(params, timings, total, cacheHitType, effectiveFastMode, tracer.stages());
     return topMemories;
   }
 
   // Step 4: FAST MODE - Skip graph traversal and temporal scoring for speed
   let finalResults = scopedSemanticResults.slice(0, topK);
   let candidatePool: any[] = scopedSemanticResults;
+  const rerankStart = Date.now();
   
   if (!effectiveFastMode) {
     // Graph traversal - enrich with related memories
@@ -500,7 +510,7 @@ export async function searchMemories(
     // Take top K
     finalResults = combined.slice(0, topK);
   }
-  stages.push({ name: "graph_temporal", in: scopedSemanticResults.length, out: candidatePool.length });
+  tracer.record({ layer: "S2.rerank", in: scopedSemanticResults.length, out: candidatePool.length, ms: Date.now() - rerankStart });
 
   // Step 4b: Intent-aware reranking over the full candidate pool (so type boosts
   // can surface on-type memories that ranked low semantically).
@@ -516,12 +526,14 @@ export async function searchMemories(
   ) {
     const intentStart = Date.now();
     finalResults = rerankByIntent(candidatePool, questionDate, queryIntent).slice(0, topK);
-    timings.push({ step: "intent_rerank", duration: Date.now() - intentStart });
-    stages.push({ name: "intent_rerank", in: candidatePool.length, out: finalResults.length });
+    const intentMs = Date.now() - intentStart;
+    timings.push({ step: "intent_rerank", duration: intentMs });
+    tracer.record({ layer: "S2.intent", in: candidatePool.length, out: finalResults.length, ms: intentMs });
   }
 
   // Step 5: Inject source chunks for context (skip in fast mode)
   let results: MemorySearchResult[];
+  let deliveryMs = 0;
   const shouldSkipChunkInjection =
     !disableLatencyDegradation &&
     !effectiveFastMode &&
@@ -560,9 +572,10 @@ export async function searchMemories(
   } else {
     const chunkStart = Date.now();
     results = await injectSourceChunks(finalResults);
-    timings.push({ step: "chunk_injection", duration: Date.now() - chunkStart });
+    deliveryMs = Date.now() - chunkStart;
+    timings.push({ step: "chunk_injection", duration: deliveryMs });
   }
-  stages.push({ name: "final", in: finalResults.length, out: results.length });
+  tracer.record({ layer: "S3.delivery", in: finalResults.length, out: results.length, ms: deliveryMs });
 
   // Cache results for similar queries
   const cacheWriteStart = Date.now();
@@ -576,7 +589,7 @@ export async function searchMemories(
     console.warn(`[MemorySearch] SLO miss: ${total}ms (budget=${TOTAL_SLO_BUDGET_MS}ms)`);
   }
   logTimings(timings, query);
-  emitDiagnostics(params, timings, total, cacheHitType, effectiveFastMode, stages);
+  emitDiagnostics(params, timings, total, cacheHitType, effectiveFastMode, tracer.stages());
 
   return results;
 }

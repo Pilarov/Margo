@@ -34,7 +34,7 @@
 | 011 Telemetry & QC | 🟡 | `engine/telemetry/collector.ts` + drop-off есть; control loop, L1/L2, alerting — нет |
 | 012 Inference providers | ⬜ | интерфейсов `EmbeddingProvider`/`RerankProvider` нет |
 | 013 Adaptive window | 🟡 | S1 сделано: окно + валидация конфига + счётчик `k` в телеметрии (`search.ts`, `retrieval/window-selector.ts`); `recall.min=30` — по замеру (A/B 2026-09-24, `reviews/AB-ADR-013-2026-09-24.md`); S2/S3 и калибровка δ/k — нет |
-| 014 Incremental extraction | ⬜ | принят 2026-09-24; шаги 0–8 не начаты |
+| 014 Incremental extraction | 🟡 | шаги 0–1 сделаны 2026-09-24 (`types.ts` + `trace.ts`, S0–S3 в телеметрии обоих монолитов); шаги 2–8 не начаты |
 
 Долг: **TD-001** закрыт кодом (`a90e011`) — в леджере был `Open`, исправлено 2026-09-24; **TD-002** закрыт
 (`81779d8`: дефолт `--project distractor` + `qa/latency-set.json`, проверено повторным прогоном, изоляция
@@ -46,11 +46,11 @@ write-path) был только в handoff — заведён в леджер; *
 
 | # | Предусловие | Состояние | Критерий закрытия |
 |---|---|---|---|
-| P1 | Baseline закреплён отдельным файлом (`qa/baseline-2026-09-24.json`) | ⬜ | `recall@10` воспроизводится дважды, расхождение ≤ 1 п.п. |
-| P2 | `qa/memory_map.json` — `run.py` берёт из него user (`RETAINDB_USER` → `mem_map["user"]`); файла нет ни локально, ни в `~/Margo/qa/` | ⬜ | прогон воспроизводится без ручного `RETAINDB_USER` |
-| P3 | `reviews/` в `.gitignore:13`, а ADR-010 §5 обещает `reviews/BENCH-*.md` (отчёты живут только на сервере) | ⬜ | отчёты попадают в git либо ADR-010 §5 приведён к реальности |
-| P4 | Схемы наборов неоднородны: `qa/latency-set.json` без поля `user` (там `user_template`) | ⬜ | все наборы имеют одинаковую схему юзера |
-| P5 | TD-002: `gen_pool.py --project` по умолчанию пишет пулы в `default` → следующий latency-прогон загрязнит baseline | ⬜ | дефолт `--project distractor`, проверено повторным прогоном |
+| P1 | Baseline закреплён отдельным файлом (`qa/baseline-2026-09-24.json`) | ✅ `81779d8` | `recall@10` воспроизводится дважды, расхождение ≤ 1 п.п. (0.787037 оба прогона, 0.000 п.п.) |
+| P2 | `qa/memory_map.json` — `run.py` берёт из него user (`RETAINDB_USER` → `mem_map["user"]`) | 🟡 файл есть в `~/Margo/qa/` (12 328 Б), в git нет (gitignored) | прогон воспроизводится без ручного `RETAINDB_USER` — да, на сервере; из чистого клона нужен `--reseed` |
+| P3 | `reviews/` в `.gitignore:13`, а ADR-010 §5 обещает `reviews/BENCH-*.md` (отчёты живут только на сервере) | ⬜ | отчёты попадают в git (ADR-010 §8 п.6 закрыл только baseline) либо ADR-010 §5 приведён к реальности |
+| P4 | Схемы наборов неоднородны: `qa/latency-set.json` без поля `user` (там `user_template`) | ⬜ (проверено 2026-09-24: `qa-set`/`hygiene-injections` — `user`, `latency-set` — `user_template`) | все наборы имеют одинаковую схему юзера |
+| P5 | TD-002: `gen_pool.py --project` по умолчанию пишет пулы в `default` → следующий latency-прогон загрязнит baseline | ✅ `81779d8` | дефолт `--project distractor`, проверено повторным прогоном |
 
 ## Этапы
 
@@ -71,8 +71,8 @@ tracing — гейты шагов 2–7 рефакторинга. Обе раб�
 
 | Шаг | Что | Exit criteria |
 |---|---|---|
-| 0 | P1 + P5: закрепить baseline файлом; `gen_pool.py --project distractor` по умолчанию | `recall@10` воспроизводится дважды, расхождение ≤ 1 п.п. |
-| 1 | `types.ts` + `trace.ts`; per-layer tracing встроен в монолиты **без изменения поведения** | drop-off виден в телеметрии, `recall@10` не изменился |
+| 0 ✅ | P1 + P5: закрепить baseline файлом; `gen_pool.py --project distractor` по умолчанию | `recall@10` воспроизводится дважды, расхождение ≤ 1 п.п. — ✅ 0.787037 / 0.000 п.п. (`81779d8`) |
+| 1 ✅ | `types.ts` + `trace.ts`; per-layer tracing встроен в монолиты **без изменения поведения** | drop-off виден в телеметрии, `recall@10` не изменился — ✅ фаннел S0–S3 с `{in,out,dropped,ms,cutoff}`, `recall@10` = 0.787 (2026-09-24) |
 
 ### Этап 2 — Retrieval: быстрые победы (текущий)
 
@@ -202,7 +202,7 @@ ADR-007 ─────────► ADR-009 процессы (reindex для 
 
 ```
 ✅ 1.   ADR-010 + ADR-011 ч.1 + датасеты              измеримость
-   2.0 ADR-014 шаги 0–1 (baseline + tracing)          предусловие (P1, P5)
+   2.0 ADR-014 шаги 0–1 (baseline + tracing)          ✅ предусловие (P1, P5) закрыто
    2.  ADR-013 window (S2/S3) + lexical (S1)          retrieval-быстрые победы
    3.  ADR-012 + расширение ADR-006 + baseline        inference-фундамент
    4.  ADR-009 schema (+retention_class/mandatory) + ADR-004 Ph1

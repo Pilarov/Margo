@@ -20,6 +20,11 @@ interface StageAgg {
   count: number;
   inSum: number;
   outSum: number;
+  /** Per-layer detail (ADR-014 step 1): dropped/ms/cutoff when the layer reports them. */
+  msSum: number;
+  msSamples: number[];
+  cutoffSum: number;
+  cutoffCount: number;
 }
 
 interface TimingAgg {
@@ -86,12 +91,22 @@ export function recordSearchTelemetry(diag: MemorySearchDiagnostics): void {
     let agg = stageAgg.get(stage.name);
     if (!agg) {
       if (stageAgg.size >= MAX_STAGES) continue;
-      agg = { name: stage.name, firstSeen: stageSeq++, count: 0, inSum: 0, outSum: 0 };
+      agg = { name: stage.name, firstSeen: stageSeq++, count: 0, inSum: 0, outSum: 0,
+              msSum: 0, msSamples: [], cutoffSum: 0, cutoffCount: 0 };
       stageAgg.set(stage.name, agg);
     }
     agg.count += 1;
     agg.inSum += Number.isFinite(stage.in) ? stage.in : 0;
     agg.outSum += Number.isFinite(stage.out) ? stage.out : 0;
+    if (Number.isFinite(stage.ms) && (stage.ms as number) >= 0) {
+      agg.msSum += stage.ms as number;
+      agg.msSamples.push(stage.ms as number);
+      if (agg.msSamples.length > MAX_SAMPLES) agg.msSamples.shift();
+    }
+    if (Number.isFinite(stage.cutoff)) {
+      agg.cutoffSum += stage.cutoff as number;
+      agg.cutoffCount += 1;
+    }
   }
 
   const timings: Record<string, number> = {
@@ -127,8 +142,17 @@ export function getDropOffSummary() {
         samples: agg.count,
         avg_in: avgIn,
         avg_out: avgOut,
+        // Net change, NOT a clamp: a layer that adds candidates (`S1.type_recall`) reports
+        // a negative "dropped". Per-layer traces clamp to 0 (a drop cannot be negative);
+        // the funnel reports the honest delta so growth is visible too.
         avg_dropped: avgIn - avgOut,
         retention: avgIn > 0 ? avgOut / avgIn : 1,
+        // ADR-014 step 1 / ADR-011 §8: per-layer cost and the chosen window. `avg_cutoff`
+        // is null when the layer never reports one, so the funnel can tell "no window"
+        // from "window k = 0".
+        avg_ms: agg.msSamples.length > 0 ? agg.msSum / agg.msSamples.length : null,
+        p95_ms: agg.msSamples.length > 0 ? percentile(agg.msSamples, 95) : null,
+        avg_cutoff: agg.cutoffCount > 0 ? agg.cutoffSum / agg.cutoffCount : null,
       };
     });
 

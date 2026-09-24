@@ -11,6 +11,8 @@ import { rerankWithInferenceService } from "./inference-client.js";
 import { selectOracleCandidateChunkIds } from "./oracle-select.js";
 import { rerank as rCfg, llm as llmCfg } from "../config.js";
 import { getLLMClient } from "./llm-client.js";
+import { createLayerTracer } from "./retrieval/trace.js";
+import type { LayerTrace } from "./retrieval/types.js";
 
 // Reranking mode: 'balanced' (cross-encoder + strict LLM guard), 'cross-encoder', 'llm'
 const RERANK_MODE = rCfg.mode;
@@ -113,6 +115,12 @@ export interface ContextResponse {
     profile?: string;
     retrievalProfile?: RetrievalProfile;
     sourceFamily?: string;
+    /**
+     * Per-layer traces for the documents path (ADR-014 step 1). This pipeline reports its
+     * funnel to the caller, while the memory path feeds the telemetry collector — the two
+     * endpoints are therefore never mixed in one aggregation (ADR-011 §8).
+     */
+    layers?: LayerTrace[];
     timing?: {
       cache_check_ms?: number;
       embed_ms?: number;
@@ -186,6 +194,7 @@ export async function retrieve(opts: QueryOptions): Promise<ContextResponse> {
 
   const startTime = Date.now();
   const timing: NonNullable<ContextResponse["meta"]["timing"]> = {};
+  const layerTracer = createLayerTracer();
   const cacheParams = {
     query,
     topK,
@@ -295,6 +304,7 @@ export async function retrieve(opts: QueryOptions): Promise<ContextResponse> {
           profile: RETRIEVAL_PROFILE,
           retrievalProfile,
           sourceFamily,
+          layers: layerTracer.traces(),
           timing,
         },
       };
@@ -387,7 +397,9 @@ export async function retrieve(opts: QueryOptions): Promise<ContextResponse> {
         oracleChunkIdFilter
       )
       : [];
-  timing.vector_ms = Date.now() - tVector;
+  const vectorChannelMs = Date.now() - tVector;
+  timing.vector_ms = vectorChannelMs;
+  layerTracer.record({ layer: "S1.vector", in: maxResultsPerSearch, out: vectorResults.length, ms: vectorChannelMs });
   allResults.push(...vectorResults);
 
   // ─── BM25 Full-Text Search ───────────────────────────────
@@ -402,7 +414,9 @@ export async function retrieve(opts: QueryOptions): Promise<ContextResponse> {
       scopedSourceIds,
       oracleChunkIdFilter
     );
-    timing.fts_ms = Date.now() - tBm25;
+    const lexicalChannelMs = Date.now() - tBm25;
+    timing.fts_ms = lexicalChannelMs;
+    layerTracer.record({ layer: "S1.lexical", in: maxResultsPerSearch, out: bm25Results.length, ms: lexicalChannelMs });
     allResults.push(...bm25Results);
   }
 
@@ -427,7 +441,9 @@ export async function retrieve(opts: QueryOptions): Promise<ContextResponse> {
       agentId,
       topK: memoryTopK,
     });
-    timing.memory_ms = Date.now() - tMem;
+    const memoryChannelMs = Date.now() - tMem;
+    timing.memory_ms = memoryChannelMs;
+    layerTracer.record({ layer: "S1.memory", in: memoryTopK, out: memoryResults.length, ms: memoryChannelMs });
     allResults.push(...memoryResults);
   }
 
@@ -438,7 +454,14 @@ export async function retrieve(opts: QueryOptions): Promise<ContextResponse> {
       depth: Math.min(graphDepth, 2),
       topK: Math.min(Math.ceil(topK / 3), 10),
     });
-    timing.graph_ms = Date.now() - tGraph;
+    const graphChannelMs = Date.now() - tGraph;
+    timing.graph_ms = graphChannelMs;
+    layerTracer.record({
+      layer: "S1.graph",
+      in: Math.min(Math.ceil(topK / 3), 10),
+      out: graphResults.length,
+      ms: graphChannelMs,
+    });
     allResults.push(...graphResults);
   }
 
@@ -450,6 +473,7 @@ export async function retrieve(opts: QueryOptions): Promise<ContextResponse> {
   }
 
   // ─── Deduplicate ─────────────────────────────────────────
+  const preFusionCount = allResults.length;
   const tDedupe = Date.now();
   allResults = deduplicateResults(allResults);
   timing.dedupe_ms = Date.now() - tDedupe;
@@ -460,8 +484,16 @@ export async function retrieve(opts: QueryOptions): Promise<ContextResponse> {
     allResults = reciprocalRankFusion(allResults, vectorWeight, bm25Weight);
     timing.rrf_ms = Date.now() - tRrf;
   }
+  layerTracer.record({
+    layer: "S1.fusion",
+    in: preFusionCount,
+    out: allResults.length,
+    ms: (timing.dedupe_ms || 0) + (timing.rrf_ms || 0),
+  });
 
   // ─── Filter by threshold ─────────────────────────────────
+  const s2Start = Date.now();
+  const s2In = allResults.length;
   const tThresh = Date.now();
   const beforeThreshold = allResults.length;
   allResults = allResults.filter((r) => r.score >= threshold);
@@ -478,7 +510,12 @@ export async function retrieve(opts: QueryOptions): Promise<ContextResponse> {
   }
 
   if (precisionV1Enabled && codebaseIntent.isCodebaseIntent && !hasExplicitScope) {
+    const beforeFamilyFilter = allResults.length;
     allResults = applyRepoFirstFamilyFilter(allResults);
+    // S0 in this pipeline is a source-scope resolution (reported in meta.sourceScope) plus
+    // this candidate-level family filter, which only runs under precision_v1. The row
+    // appears only when a filter actually narrows the candidate set — no placeholder rows.
+    layerTracer.record({ layer: "S0.family", in: beforeFamilyFilter, out: allResults.length });
   }
 
   if (allResults.length > 0) {
@@ -499,10 +536,13 @@ export async function retrieve(opts: QueryOptions): Promise<ContextResponse> {
   if (precisionV1Enabled) {
     allResults = applyPrecisionCutoff(allResults, codebaseIntent.isCodebaseIntent);
   }
+  // S2: threshold + source-intent boost + parent expansion + cross-encoder/LLM rerank.
+  layerTracer.record({ layer: "S2.rerank", in: s2In, out: allResults.length, ms: Date.now() - s2Start });
 
   // ─── Limit to topK ──────────────────────────────────────
 
   // ─── Enrich with document/source metadata ────────────────
+  const s3In = allResults.length;
   const tEnrich = Date.now();
   allResults = await enrichResults(allResults);
   timing.enrich_ms = Date.now() - tEnrich;
@@ -513,6 +553,12 @@ export async function retrieve(opts: QueryOptions): Promise<ContextResponse> {
   const tPack = Date.now();
   let context = packContext(allResults, maxTokens);
   timing.pack_ms = Date.now() - tPack;
+  layerTracer.record({
+    layer: "S3.delivery",
+    in: s3In,
+    out: allResults.length,
+    ms: (timing.enrich_ms || 0) + (timing.pack_ms || 0),
+  });
   const contextHash = createHash("sha256").update(context).digest("hex").slice(0, 16);
 
   // ─── Compression ──────────────────────────────────────────
@@ -567,6 +613,7 @@ export async function retrieve(opts: QueryOptions): Promise<ContextResponse> {
       profile: RETRIEVAL_PROFILE,
       retrievalProfile,
       sourceFamily,
+      layers: layerTracer.traces(),
       timing,
     },
   };

@@ -81,6 +81,39 @@ describe("telemetry collector", () => {
     expect(s.timings.total_ms.p95_ms).toBe(96);
   });
 
+  it("aggregates per-layer dropped/ms/cutoff (ADR-011 §1/§8)", () => {
+    recordSearchTelemetry(diag({ stages: [
+      { name: "S1.window", in: 100, out: 30, dropped: 70, ms: 2, cutoff: 30 },
+      { name: "S1.window", in: 100, out: 40, dropped: 60, ms: 4, cutoff: 40 },
+    ] }));
+
+    const s = getDropOffSummary();
+    const window = s.stages.find((x) => x.name === "S1.window")!;
+    expect(window.samples).toBe(2);
+    expect(window.avg_dropped).toBe(65);
+    expect(window.avg_ms).toBe(3);
+    expect(window.p95_ms).toBe(4);
+    expect(window.avg_cutoff).toBe(35);
+  });
+
+  it("leaves cutoff null for a layer that applies no window", () => {
+    recordSearchTelemetry(diag({ stages: [{ name: "S3.delivery", in: 10, out: 10, dropped: 0, ms: 1 }] }));
+
+    const s = getDropOffSummary();
+    const delivery = s.stages.find((x) => x.name === "S3.delivery")!;
+    expect(delivery.avg_cutoff).toBeNull();
+    expect(delivery.avg_ms).toBe(1);
+  });
+
+  it("reports a negative delta for a layer that adds candidates (net change, not a drop)", () => {
+    recordSearchTelemetry(diag({ stages: [{ name: "S1.type_recall", in: 33, out: 37, dropped: 0, ms: 2 }] }));
+
+    const s = getDropOffSummary();
+    const recall = s.stages.find((x) => x.name === "S1.type_recall")!;
+    expect(recall.avg_dropped).toBe(-4);
+    expect(recall.retention).toBeGreaterThan(1);
+  });
+
   it("records LLM token usage", () => {
     recordLLMUsage({ prompt_tokens: 10, completion_tokens: 5 });
     recordLLMUsage({ total_tokens: 30 });
