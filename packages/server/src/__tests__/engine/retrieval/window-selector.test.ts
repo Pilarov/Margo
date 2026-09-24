@@ -62,3 +62,32 @@ describe("window selectors", () => {
     expect(selectWindow("fixed", [0.9], { min: 5, max: 50 }, { k: 999 })).toBe(50);
   });
 });
+
+/**
+ * ADR-013 contract fix (2026-09-24): the caller's `top_k` is an upper bound. A window may
+ * narrow a result set, never widen it past what the caller asked for — otherwise a delivery
+ * window with floor `min=30` hands a request for `top_k=10` thirty rows, and a request for
+ * `top_k=25` silently gets ten (the `fixed k=10` default).
+ */
+describe("selectWindow / caller request is an upper bound", () => {
+  it("caps the window even when the layer floor is higher", () => {
+    expect(selectWindow("fixed", [0.9, 0.8], { min: 30, max: 100 }, { k: 50 }, 10)).toBe(10);
+  });
+
+  it("does not widen the window when the caller asks for more", () => {
+    expect(selectWindow("fixed", [0.9, 0.8], { min: 10, max: 20 }, { k: 12 }, 100)).toBe(12);
+  });
+
+  it("behaves exactly as before when no request is supplied", () => {
+    expect(selectWindow("fixed", [0.9, 0.8], { min: 30, max: 100 }, { k: 50 })).toBe(50);
+  });
+
+  it("ignores a non-positive or non-finite request instead of returning nothing", () => {
+    expect(selectWindow("fixed", [0.9, 0.8], { min: 1, max: 50 }, { k: 7 }, 0)).toBe(7);
+    expect(selectWindow("fixed", [0.9, 0.8], { min: 1, max: 50 }, { k: 7 }, Number.NaN)).toBe(7);
+  });
+
+  it("never exceeds the pool the caller actually has", () => {
+    expect(selectWindow("fixed", [0.9, 0.8], { min: 1, max: 50 }, { k: 50 }, 2)).toBe(2);
+  });
+});

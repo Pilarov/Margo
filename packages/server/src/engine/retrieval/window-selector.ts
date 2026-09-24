@@ -125,17 +125,34 @@ export function isWindowStrategy(name: string): boolean {
 }
 
 /**
+ * The caller's request (`top_k`) is an upper bound: a window may *narrow* a result set, never
+ * widen it past what was asked for. Without this, a delivery-stage window with floor `min=30`
+ * would answer a request for `top_k=10` with thirty rows, and the `fixed k=10` default would
+ * silently shrink a request for `top_k=25` (ADR-013 contract fix, 2026-09-24).
+ * A non-positive or non-finite request is ignored — the API validates `top_k >= 1`, so such a
+ * value means "no request", not "return nothing".
+ */
+export function clampWindowToRequest(k: number, requested?: number): number {
+  if (requested === undefined || !Number.isFinite(requested) || requested < 1) return k;
+  return Math.min(k, Math.floor(requested));
+}
+
+/**
  * Cut point for one layer. An unknown strategy resolves to the DEFAULT strategy —
  * never to `fixed`, whose missing `params.k` would fall back to `bounds.max` and hand a
  * typo the widest (most expensive) window (review I3). `config.ts` rejects unknown names
  * at load time with a warning; this is the runtime backstop.
+ *
+ * `requested` — the caller's own limit for this stage (delivery/rerank); `undefined` at stages
+ * where the pool size is the engine's business (recall).
  */
 export function selectWindow(
   strategy: string,
   scores: number[],
   bounds: WindowBounds,
-  params?: Record<string, number>
+  params?: Record<string, number>,
+  requested?: number
 ): number {
   const selector = isWindowStrategy(strategy) ? windowSelectors[strategy] : windowSelectors[DEFAULT_WINDOW_STRATEGY];
-  return selector.select(scores, bounds, params);
+  return clampWindowToRequest(selector.select(scores, bounds, params), requested);
 }

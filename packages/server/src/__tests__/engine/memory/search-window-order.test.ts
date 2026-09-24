@@ -51,4 +51,17 @@ describe("S1 recall window order (ADR-013 / review I4)", () => {
     expect(k).toBe(2);
     expect(kept).toHaveLength(2);
   });
+
+  it("never returns more than the caller's request (ADR-013 delivery contract)", () => {
+    // A delivery-stage window with floor min=30 must not answer a request for 10 with 30.
+    const candidates = Array.from({ length: 40 }, (_, i) => ({ id: `m${i}`, similarity: 0.9 - i * 0.01 }));
+    const { kept, k } = __cutRecallWindow(
+      candidates,
+      { strategy: "fixed", min: 30, max: 100, params: { k: 50 } },
+      {},
+      10
+    );
+    expect(k).toBe(10);
+    expect(kept).toHaveLength(10);
+  });
 });

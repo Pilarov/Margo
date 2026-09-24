@@ -245,18 +245,24 @@ function rerankByScope(memories: any[], params: Pick<MemorySearchParams, "userId
  * AFTER it — cutting on the raw `similarity` first drops candidates that the scope boost
  * would have promoted, which contradicts "ranking = relevance" (review I4). Exported for
  * tests: the composition order is the contract, not an implementation detail.
+ *
+ * `requested` — the caller's own `top_k`, when the stage is caller-facing. The recall stage
+ * passes nothing (pool size is the engine's business); delivery/rerank stages must pass it so
+ * a window can narrow a result set but never widen it past the request (ADR-013 contract fix).
  */
 export function __cutRecallWindow<T extends { similarity?: number; finalScore?: number }>(
   candidates: T[],
   layer: WindowLayerConfig,
-  scopeParams: Pick<MemorySearchParams, "userId" | "sessionId" | "agentId" | "taskId">
+  scopeParams: Pick<MemorySearchParams, "userId" | "sessionId" | "agentId" | "taskId">,
+  requested?: number
 ): { kept: T[]; in: number; k: number } {
   const boosted = rerankByScope(candidates as any[], scopeParams) as unknown as T[];
   const k = selectWindow(
     layer.strategy,
     boosted.map((candidate: any) => candidate.finalScore ?? candidate.similarity ?? 0),
     { min: layer.min, max: layer.max },
-    layer.params
+    layer.params,
+    requested
   );
   return { kept: boosted.slice(0, k), in: boosted.length, k };
 }
