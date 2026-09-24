@@ -132,14 +132,18 @@ Test layers worth knowing:
 
 ## 8. Roadmap (ADRs in `architecture/`)
 
+Статусы сверены с кодом 2026-09-24. Порядок работ, exit criteria и состояние этапов —
+в `research/2026-09-08-adr-implementation-order.md` (единственный источник по этапам).
+
 | Phase | ADR | What | Status |
 |---|---|---|---|
 | — | — | multi-provider LLM config | ✅ done |
 | — | — | Hermes plugin contract | ✅ done |
-| P1 | ADR-002 | one-pass extraction (1 LLM call vs N) | proposed |
-| P2 | ADR-003 | Dreamer consolidation (inductive + peer-card) | proposed |
-| P3 | ADR-004 | progressive context + async write | proposed |
-| P4 | ADR-005 | knowledge→skill pipeline | hypothesis |
+| P1 | ADR-002 | one-pass extraction (1 LLM call vs N) | ✅ Accepted, реализован |
+| P2 | ADR-003 | Dreamer consolidation (inductive + peer-card) | ✅ Accepted, реализован |
+| P3 | ADR-004 | progressive context + async write | Proposed, не начат |
+| P4 | ADR-005 | knowledge→skill pipeline | ❌ Rejected (2026-09-08) |
+| — | ADR-007/009/010/011/012/013/014 | retrieval S0–S3 · hygiene · benchmark · telemetry · providers · window · extraction | см. план этапов |
 
 Docs: `README.md`, `CONFIGURATION.md`, `TESTING.md`, `architecture/VISION.md`.
 

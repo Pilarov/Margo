@@ -72,4 +72,50 @@ describe("retrieval/ANN config (TD-001)", () => {
     expect(retrieval.ann.type).toBe("ivfflat");
     expect(retrieval.ann.probes).toBe(25);
   });
+
+  it("defaults window strategies per layer", async () => {
+    const { retrieval } = await loadConfigWithEnv({});
+    expect(retrieval.window.recall.strategy).toBe("curvature");
+    // recall.min = 30: the measured floor that keeps recall@10 at 0.787 (review I1)
+    expect(retrieval.window.recall.min).toBe(30);
+    expect(retrieval.window.recall.max).toBe(100);
+    expect(retrieval.window.rerank.strategy).toBe("median-gap");
+    expect(retrieval.window.delivery.strategy).toBe("fixed");
+    expect(retrieval.window.delivery.params.k).toBe(10);
+  });
+
+  it("reads window overrides from env", async () => {
+    const { retrieval } = await loadConfigWithEnv({
+      WINDOW_RECALL_STRATEGY: "median-gap",
+      WINDOW_RECALL_MIN: "5",
+    });
+    expect(retrieval.window.recall.strategy).toBe("median-gap");
+    expect(retrieval.window.recall.min).toBe(5);
+  });
+
+  it("rejects an unknown window strategy at load time (review I3)", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const { retrieval } = await loadConfigWithEnv({ WINDOW_RECALL_STRATEGY: "curvatur" });
+      expect(retrieval.window.recall.strategy).toBe("curvature");
+      expect(warn).toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("normalizes window bounds: min >= 1 and min <= max (review I3)", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const low = await loadConfigWithEnv({ WINDOW_RECALL_MIN: "0" });
+      expect(low.retrieval.window.recall.min).toBe(1);
+
+      const inverted = await loadConfigWithEnv({ WINDOW_RECALL_MIN: "50", WINDOW_RECALL_MAX: "10" });
+      expect(inverted.retrieval.window.recall.max).toBe(50);
+      expect(inverted.retrieval.window.recall.min).toBeLessThanOrEqual(inverted.retrieval.window.recall.max);
+      expect(warn).toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
+  });
 });

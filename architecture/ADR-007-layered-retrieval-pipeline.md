@@ -75,6 +75,8 @@ S3 DELIVERY
 - **S0 детерминирован и обязателен**: фильтр стоит до семантики; изоляция и актуальность не зависят от косинуса.
 - **Обязательные типы bypass семантику**: type-recall не отсекается L0/semantic/graph.
 - **Разделение типов связей**: версионные → S0; ассоциативные → S1 graph.
+- **Ранжирование = relevance, не importance**: S1 fused score и S2 cross-encoder/LLM — это relevance к запросу. `importance`/`confidence`/`retention_class` НЕ поднимают запись в топе (сигналы селекции — ADR-009). Исключение: `mandatory`-записи pin'ятся в S3 delivery, не в recall/rerank.
+- **Recency = tie-breaker**: temporal в S3 решает только при равной relevance, не как скалярный множитель (актуальность → ADR-009).
 - **Каналы S1 независимы**: падение одного (semantic/lexical/graph/fast) не ломает остальные; фузия — по доступным.
 - **Граф — низкий вес + жёсткие лимиты** (`depth`, `maxDegree`, `minConfidence`); иначе шум и latency.
 - **SLO разнесён**: S0+S1 ≤ 150ms, S2 ≤ 100ms, S3 ≤ 50ms, S2-LLM ≤ 1.5s (опционален, вне критического пути).
@@ -243,3 +245,5 @@ engine/embeddings-fast.ts   отдельный модуль (model2vec), сво�
 - **ADR-002 (one-pass extraction)** — типы памятей питают type-recall в S1.
 - **ADR-003 (Dreamer)** — derived-памяти и peer-card в recall.
 - **ADR-012 (model-agnostic inference providers)** — S0/S1/S2 используют провайдеры; fast = `fastEmbedding`; rerank = `RerankProvider`.
+- **ADR-013 (adaptive retrieval window)** — динамический top-K на слоях (заменяет фиксированный `limit=topK*3` в S1).
+- **ADR-014 (incremental extraction)** — стратегия перехода к этой архитектуре (strangler + флаг профиля) и уточнённая карта модулей: добавлены `recall/memory`, `rerank/intent`, `delivery/enrich`. При расхождении карт модулей приоритет у ADR-014.

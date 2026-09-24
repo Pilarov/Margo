@@ -4,28 +4,6 @@ Ledger of known debt, workarounds and risks. Newest first.
 
 ## Open
 
-### TD-001 — ANN recall degrades with corpus size (pgvector IVFFlat)
-**Severity**: High · **Found**: 2026-09-22 (Stage 1 benchmark) · **Blocks**: ADR-006, ADR-007
-
-`pgvector.sql:17` creates `memories_embedding_idx USING ivfflat (... ) WITH (lists = 100)`, and
-`ivfflat.probes` is never set → default **1** (scans 1 of 100 lists).
-
-Observed: recall@10 = **0.937** at 171 memories → **0.698** at 11,208 (same queries).
-The planner also flips between seq-scan and ANN, so recall is not reproducible without a
-stable corpus + `ANALYZE`.
-
-**Fix (ADR-006/007)**: HNSW, or `lists ≈ N/1000` + `probes` proportional to N, or a documented
-`ANALYZE` + index-rebuild step. Verify recall stays flat across N.
-
-### TD-002 — Benchmark corpus is not isolated from latency pools
-**Severity**: High · **Found**: 2026-09-22 · **Blocks**: ADR-010 reproducibility
-
-`gen_pool.py` writes latency pools (up to 10k) into the same `memories` table/ANN index as the
-golden set, so a latency run degrades the retrieval baseline (TD-001).
-
-**Workaround now**: `DELETE FROM memories WHERE "userId" LIKE 'latency-pool-%'; ANALYZE memories;`
-**Fix**: isolate benchmark data (separate DB/schema) or auto-cleanup + ANALYZE after `--suite latency`.
-
 ### TD-003 — `SourceStatus "CONNECTING"` enum drift
 **Severity**: Medium · **Found**: 2026-09-22 (server log) · **Blocks**: source scheduler
 
@@ -47,9 +25,64 @@ Repeated `seed-dialectic-data.py` runs created `working-memory-test-user` **and*
 **Severity**: Medium · **Found**: earlier · **Blocks**: ADR-007 quality
 
 `q-package-manager` = 0.00 (pnpm), `q-backend` = 0.67 (grpc-comms) — memories far from the query
-embedding are missed. Target of ADR-007 (hybrid recall + type/graph channels).
+embedding are missed. Target of ADR-007 (hybrid recall + type/graph channels) and Этап 2 of the plan.
+
+### TD-009 — Synthetic pool generation runs through the LLM write path
+**Severity**: Medium · **Found**: 2026-09-23 (session handoff) · **Blocks**: benchmark cost
+
+`gen_pool.py` writes synthetic memories through the normal write path, which fires relation-extraction
+LLM calls — generating the 10k distractor pool costs real money for data that needs no relations.
+**Fix**: the pool generator should write embedding-only records (skip the relations LLM), or call the
+write path with relations disabled.
+
+### TD-010 — `<=>` still scattered outside `db/vector.ts`
+**Severity**: Medium · **Found**: 2026-09-24 (ADR audit) · **Blocks**: ADR-006 compliance, `metric` changes
+
+ADR-006 decided `db/vector.ts` is the only vector access module and made it a compliance rule
+("никакого `<=>` вне `db/vector.ts`"). Reality: **27 occurrences across 5 files** — `retriever.ts` (16),
+`api/routes.ts` (4), `consolidation.ts` (3, a site absent from ADR-006's inventory),
+`search.ts` (2), `oracle-select.ts` (2). ADR-007 later records "29 сайтов `<=>`" as a fact.
+**Fix**: either complete the migration to the helper (preferred, ADR-006 §План реализации п.3), or
+rewrite ADR-006 §Compliance to state the actual rule. Touches the same files as Этап 5 (ADR-014).
+
+### TD-011 — No latency baseline file (the p99 criterion is not gradable)
+**Severity**: Medium · **Found**: 2026-09-24 (ADR-013 A/B) · **Blocks**: ADR-013/ADR-014 p99 criteria
+
+`qa/baseline-*.json` carries retrieval and synthesis metrics only; there are no `latency_*` keys in
+any committed baseline. ADR-013/ADR-014 require "p99 not worse by more than +10% vs the named
+baseline file", which cannot be evaluated — the comparison is arm-vs-arm only. Measured evidence
+(`qa/bench-*.json`, `reviews/BENCH-*.md`) is gitignored and server-local, so any "p99 was X" claim
+is unverifiable a month later.
+
+**Also measured 2026-09-24**: three consecutive latency runs at *identical* config give 1k p99
+154.7 / 166.7 / 184.4 ms and 10k p99 212.7 / 218.9 / 229.9 ms (spread +19.2% / +8.1%). A single
+run cannot resolve a +10% criterion — verdicts must use medians of repeats (or a fixed-run-count
+protocol), otherwise the gate is a coin flip.
+**Fix**: run `scripts/benchmark/run.py --suite latency --k 10 --write-baseline` and commit the dated
+baseline file; extend `.gitignore`-aware evidence handling so the numbers survive a lost server;
+give `run.py --suite latency` a `--repeats-suite` mode that aggregates N runs and reports the median
+plus spread.
 
 ## Resolved
+
+### TD-002 — Benchmark corpus is not isolated from latency pools — RESOLVED `81779d8`
+**Found**: 2026-09-22 · **Closed**: 2026-09-24
+
+Latency pools (up to 10k) were written into the golden corpus project, degrading the retrieval
+baseline through the shared ANN index. The 2026-09-23 DB move was one-off; the tooling still
+re-polluted on the next run. Now `gen_pool.py` defaults to `--project distractor` and
+`qa/latency-set.json` declares `project: "distractor"`, so the isolation is reproducible.
+Verified 2026-09-24: a search for `latency-pool-10000` in `distractor` returns synthetic pool
+records, the same query in `default` returns golden-corpus records; two consecutive retrieval runs
+give recall@10 = 0.787037 with a 0.000 pp delta (P1/P5 closed).
+
+### TD-001 — ANN recall degrades with corpus size (pgvector IVFFlat) — RESOLVED `a90e011`
+**Found**: 2026-09-22 · **Closed**: 2026-09-24 (ledger was stale)
+
+Observed: recall@10 = **0.937** at 171 memories → **0.698** at 11,208. Cause: `ivfflat` with `lists=100`
+and `probes` never set (default 1). Fixed by switching to **HNSW** (`prisma/scripts/pgvector.sql:16`)
+with per-query `set_config('hnsw.ef_search', …)` (`engine/memory/search.ts:631-635`); counted in
+`config.ts:284` and pinned by `config-benchmark-telemetry.test.ts`.
 
 ### TD-006 — `ingestion_jobs` schema mismatch (async bulk broken) — RESOLVED `d654c6d`
 Cloud-shaped `ingestion-queue.ts` (snake_case, `org_id`/`user_id`, counters, `ingestion_documents`)

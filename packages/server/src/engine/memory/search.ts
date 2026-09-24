@@ -18,7 +18,8 @@ import { calculateTemporalRelevance } from "./temporal.js";
 import { getFromSemanticCache, setInSemanticCache, getFromCache, setInCache } from "../cache.js";
 import type { MemoryScopeTarget, MemorySearchDiagnostics, MemorySearchParams, MemorySearchResult, MemoryStage } from "./types.js";
 import { recordSearchTelemetry } from "../telemetry/collector.js";
-import { retrieval as retrievalCfg } from "../../config.js";
+import { retrieval as retrievalCfg, type WindowLayerConfig } from "../../config.js";
+import { selectWindow } from "../retrieval/window-selector.js";
 import { Prisma } from "@prisma/client";
 import { decrypt } from "../../lib/encryption.js";
 
@@ -234,6 +235,30 @@ function rerankByScope(memories: any[], params: Pick<MemorySearchParams, "userId
     })
     .sort((left, right) => (right.finalScore ?? right.similarity ?? 0) - (left.finalScore ?? left.similarity ?? 0));
 }
+
+/**
+ * S1 recall cut (ADR-013): scope-boost the candidates first, then let the configured
+ * window decide how many of them survive.
+ *
+ * The boost is part of the ranking every later stage sees, so the window has to cut
+ * AFTER it — cutting on the raw `similarity` first drops candidates that the scope boost
+ * would have promoted, which contradicts "ranking = relevance" (review I4). Exported for
+ * tests: the composition order is the contract, not an implementation detail.
+ */
+export function __cutRecallWindow<T extends { similarity?: number; finalScore?: number }>(
+  candidates: T[],
+  layer: WindowLayerConfig,
+  scopeParams: Pick<MemorySearchParams, "userId" | "sessionId" | "agentId" | "taskId">
+): { kept: T[]; in: number; k: number } {
+  const boosted = rerankByScope(candidates as any[], scopeParams) as unknown as T[];
+  const k = selectWindow(
+    layer.strategy,
+    boosted.map((candidate: any) => candidate.finalScore ?? candidate.similarity ?? 0),
+    { min: layer.min, max: layer.max },
+    layer.params
+  );
+  return { kept: boosted.slice(0, k), in: boosted.length, k };
+}
 /**
  * Main memory search function
  * Implements memory-first hybrid approach from Supermemory
@@ -318,6 +343,7 @@ export async function searchMemories(
 
   // Step 2: Vector search on memories (NOT chunks!)
   const vectorStart = Date.now();
+  const recallWindow = retrievalCfg.window.recall;
   const semanticResults = await vectorSearchMemories({
     embedding: queryEmbedding,
     userId,
@@ -332,11 +358,18 @@ export async function searchMemories(
     memoryTypes: effectiveMemoryTypes,
     namespace,
     tags,
-    limit: topK * 3, // Get more for reranking
+    limit: recallWindow.max, // fetch up to the window cap, cut by selector below
   });
   timings.push({ step: "vector_search", duration: Date.now() - vectorStart });
-  stages.push({ name: "vector", in: topK * 3, out: semanticResults.length });
-  const scopedSemanticResults = rerankByScope(semanticResults, { userId, sessionId, agentId, taskId });
+  stages.push({ name: "vector", in: recallWindow.max, out: semanticResults.length });
+  // Dynamic window (ADR-013): cut the vector candidates by the configured strategy
+  // (curvature / median-gap / relative-top / fixed) instead of a hard topK*3, and on the
+  // scope-boosted ranking the rest of the pipeline sees (review I4).
+  const recallCut = __cutRecallWindow(semanticResults, recallWindow, { userId, sessionId, agentId, taskId });
+  const scopedSemanticResults = recallCut.kept;
+  // Publish the chosen window (review M1): without it the funnel only hinted at the cut
+  // through the next stage's `in`.
+  stages.push({ name: "window_recall", in: recallCut.in, out: recallCut.k });
 
   // Type-aware recall boost: when the query asks for a specific memory type, also
   // pull that type directly so semantic gaps (e.g. "goals" vs "Reduce p99 latency")

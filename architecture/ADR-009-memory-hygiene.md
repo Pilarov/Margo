@@ -48,7 +48,7 @@ candidate → active → decayed → archived → deleted
 
 - `candidate` — записана, но не готова (нет обоих векторов/связей).
 - `active` — видна в retrieval.
-- `decayed` — importance ниже порога; видна, но с пониженным весом.
+- `decayed` — эффективный вес ниже порога (decay/retention); видна, но с пониженным весом. `mandatory`-записи сюда не попадают.
 - `archived` — невидима в retrieval, но сохраняется для графа/аудита.
 - `deleted` — необратимо (только по retention/privacy).
 - `merged`/`superseded` — терминальные указатели на canonical.
@@ -57,17 +57,43 @@ candidate → active → decayed → archived → deleted
 
 ### 2. Сигналы селекции
 
-| Сигнал | Роль |
-|---|---|
-| `importance` (+decay) | базовый вес |
-| `confidence` | надёжность |
-| `accessCount` / `recallCount` | востребованность (reinforcement) |
-| `lastAccessedAt` | свежесть использования |
-| `scope` | SESSION эфемерен, USER долговечен |
-| `relations` | `superseded` → архив |
-| `grounding` (`sourceChunkId`) | подтверждённость источником |
-| `validatorIssues` | мусор → GC |
-| `entityMentions` | связность с графом |
+**Декомпозиция `importance`.** Скаляр `importance` сейчас смешивает три разные вещи
+(retention / ranking / инвариантность) и «мёртв»: LLM его не назначает (в
+`InferredMemorySchema` только `confidence`), дефолт `0.5` (`write.ts`), двигают его
+лишь decay/accessBoost/merge. Ранжирование держится на `confidence` (веса 0.55/0.45),
+а не на осмысленной важности.
+
+Разделяем на ортогональные сигналы — **хранимые** (атрибуты записи) vs
+**вычисляемые** (свойства пары запись↔запрос):
+
+| Сигнал | Тип | Роль | Когда |
+|---|---|---|---|
+| `confidence` | 0..1, хранится | достоверность факта (LLM уже выдаёт) | на write |
+| `retention_class` | enum, хранится | retention-политика: `mandatory \| critical \| normal \| transient \| ephemeral` | на write |
+| `relevance` | 0..1, вычисляется | релевантность запросу — **главный сигнал ранжирования** (ADR-007) | на query |
+| `recency` | вычисляется | актуальность (validFrom/validUntil, updatedAt) | на query |
+| `accessCount` / `recallCount` | счётчик, хранится | востребованность (reinforcement) | на access |
+| `lastAccessedAt` | хранится | свежесть использования | на access |
+| `scope` | enum, хранится | SESSION эфемерен, USER долговечен | на write |
+| `relations` | хранится | `superseded` → архив | на write |
+| `grounding` (`sourceChunkId`) | хранится | подтверждённость источником | на write |
+| `validatorIssues` | хранится | мусор → GC | на write |
+| `entityMentions` | хранится | связность с графом | на write |
+
+- **`retention_class`** заменяет `importance` в роли retention-политики. Top-уровень
+  `mandatory` = «обязательная»: не decay, не archive, всегда pin, никогда не удаляется
+  hygiene-процессами. Это обобщение текущего `permanentTypes` (factual/instruction)
+  с «по типу» на «по экземпляру».
+- **`relevance`** и **`recency`** не хранятся — вычисляются в момент запроса, поэтому
+  не могут «затухать» в одном числе. `importance` как хранимый скаляр ранжирования
+  **убирается из ranking** (см. ADR-007).
+
+**Как актуальность участвует в решении** — не скалярным множителем, а 4 механизмами:
+
+1. **Validity (hard)** — `validFrom`/`validUntil`: вне окна память **исключается**, не понижается.
+2. **Supersession** — `correction` инвалидирует старую версию (`shouldInvalidateMemory`), не «проигрывает по свежести».
+3. **Tie-breaker (soft)** — `recency` решает только при равной `relevance`.
+4. **Retention (lifecycle)** — decay/archive управляют жизненным циклом, вне ответа на запрос.
 
 Решения: **keep / promote / merge / archive / delete**. Политика — функция от сигналов; пороги в конфиге, не hard-code.
 

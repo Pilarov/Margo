@@ -180,3 +180,4 @@ Alerting             (SLO/QC-нарушения)
 - **ADR-004 (summary/full)** — summary вместо содержимого в логах (приватность).
 - **ADR-007 (retrieval S0–S3)** — per-layer drop-off, контроль latency SLO.
 - **ADR-009 (memory hygiene)** — data-quality аудит (dangling, `embedding_status`).
+- **ADR-013 (adaptive retrieval window)** — collector хранит выбранный `k` на слой; tuner меняет `strategy`/`params` окна.

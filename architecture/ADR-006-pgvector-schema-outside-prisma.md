@@ -1,6 +1,10 @@
 # ADR-006: Векторная схема вне Prisma DSL — кастомный слой pgvector (тип + индексы + хелпер)
 
 **Status**: Accepted
+**Implementation**: 🟡 partial (2026-09-24) — `db/vector.ts` (валидация размерности + хелперы) и
+идемпотентный `prisma/scripts/pgvector.sql` сделаны; миграция `<=>` из «трёх файлов» **не выполнена**:
+27 вхождений в 5 файлах, включая сайт `consolidation.ts`, которого в инвентаре ADR не было.
+Пункт §Compliance «никакого `<=>` вне `db/vector.ts`» на сегодня нарушен — см. TD-010.
 **Date**: 2026-08-31
 **Deciders**: opencode + dspilarov
 

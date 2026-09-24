@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "fs";
 import { resolve } from "path";
+import { isWindowStrategy, WINDOW_STRATEGY_NAMES } from "./engine/retrieval/window-selector.js";
 
 function readJsonConfig(): Record<string, any> {
   const path = resolve(process.cwd(), "retaindb.config.json");
@@ -295,7 +296,63 @@ export interface RetrievalConfig {
     /** Below this corpus size the planner may prefer a seq scan anyway. */
     seqScanThreshold: number;
   };
+  window: {
+    recall: WindowLayerConfig;
+    rerank: WindowLayerConfig;
+    delivery: WindowLayerConfig;
+  };
 }
+
+export interface WindowLayerConfig {
+  /** Strategy from window-selector: fixed | relative-top | median-gap | curvature */
+  strategy: string;
+  min: number;
+  max: number;
+  params: Record<string, number>;
+}
+
+/**
+ * Validate one window layer (review I3). A typo in `WINDOW_*_STRATEGY` used to fall
+ * through to `fixed` with no `params.k` — i.e. to `bounds.max`, the most expensive
+ * window. Unknown names now resolve to the layer's documented default and warn at load
+ * time; bounds are normalized to `1 <= min <= max`.
+ */
+function windowLayer(
+  name: string,
+  defaults: { strategy: string; min: number; max: number; params: Record<string, number> }
+): WindowLayerConfig {
+  const j = (jWindow[name] ?? {}) as Record<string, any>;
+  const env = name.toUpperCase();
+
+  const requestedStrategy = str(process.env[`WINDOW_${env}_STRATEGY`], j.strategy) || defaults.strategy;
+  let strategy = requestedStrategy;
+  if (!isWindowStrategy(strategy)) {
+    const fallback = isWindowStrategy(defaults.strategy) ? defaults.strategy : WINDOW_STRATEGY_NAMES[0];
+    console.warn(
+      `[Config] retrieval.window.${name}: unknown strategy "${requestedStrategy}" — using "${fallback}" ` +
+      `(known: ${WINDOW_STRATEGY_NAMES.join(" | ")})`
+    );
+    strategy = fallback;
+  }
+
+  const rawMin = num(process.env[`WINDOW_${env}_MIN`], j.min) ?? defaults.min;
+  const rawMax = num(process.env[`WINDOW_${env}_MAX`], j.max) ?? defaults.max;
+  let min = Math.max(1, Math.round(rawMin));
+  let max = Math.max(1, Math.round(rawMax));
+  if (min > max) {
+    console.warn(`[Config] retrieval.window.${name}: min (${min}) > max (${max}) — raising max to min`);
+    max = min;
+  }
+
+  return {
+    strategy,
+    min,
+    max,
+    params: { ...defaults.params, ...(j.params ?? {}) },
+  };
+}
+
+const jWindow = (jRetrieval.window ?? {}) as Record<string, any>;
 
 export const retrieval: RetrievalConfig = {
   ann: {
@@ -303,5 +360,14 @@ export const retrieval: RetrievalConfig = {
     efSearch: num(process.env.HNSW_EF_SEARCH, jAnn.efSearch) ?? 100,
     probes: num(process.env.IVFFLAT_PROBES, jAnn.probes) ?? 10,
     seqScanThreshold: num(process.env.ANN_SEQ_SCAN_THRESHOLD, jAnn.seqScanThreshold) ?? 2000,
+  },
+  window: {
+    // recall.min = 30 (measured 2026-09-24): with min=10 the curvature window keeps ~13
+    // candidates and recall@10 falls to 0.769; with the floor at the old topK*3 = 30 the
+    // window keeps ~32.6 and recall@10 stays 0.787 with p99 154.7 / 212.7 ms (inside the
+    // +10% criterion vs fixed/30). See reviews/AB-ADR-013-2026-09-24.md.
+    recall: windowLayer("recall", { strategy: "curvature", min: 30, max: 100, params: {} }),
+    rerank: windowLayer("rerank", { strategy: "median-gap", min: 1, max: 50, params: { k: 3 } }),
+    delivery: windowLayer("delivery", { strategy: "fixed", min: 1, max: 10, params: { k: 10 } }),
   },
 };

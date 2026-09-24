@@ -1,7 +1,8 @@
 # Margo v2: Memory Lifecycle Architecture
 
-**Status**: Proposed (ADR-001–005)
-**Date**: 2026-07-20
+**Документ видения, а не ADR.** Статусы решений живут в шапках ADR; порядок и состояние реализации —
+в `research/2026-09-08-adr-implementation-order.md` (единственный источник по этапам).
+**Date**: 2026-07-20 (сверено со статусами ADR 2026-09-24)
 
 ## Целостное видение
 
@@ -36,10 +37,14 @@ Margo v2 — эволюция пайплайна памяти с опциона�
 
 | Фаза | ADR | Что | Статус |
 |---|---|---|---|
-| **Phase 1** | ADR-002 | One-pass extraction | Proposed |
-| **Phase 2** | ADR-003 | Dreamer consolidation (+ skill_candidate flag) | Proposed |
-| **Phase 3** | ADR-004 | Progressive context + async write | Proposed |
-| **Phase 4** | ADR-005 | Knowledge → Skill pipeline | Hypothesis |
+| **Phase 1** | ADR-002 | One-pass extraction | **Accepted** — реализован (✅) |
+| **Phase 2** | ADR-003 | Dreamer consolidation (+ skill_candidate flag) | **Accepted** — реализован (✅) |
+| **Phase 3** | ADR-004 | Progressive context + async write | Proposed — не начат (⬜) |
+| **Phase 4** | ADR-005 | Knowledge → Skill pipeline | **Rejected** 2026-09-08 (❌) |
+
+Терминология доставки в схеме выше (`L0 abstract / L1 overview / L2 full`) **снята** решением ADR-004:
+приняты два уровня — `summary` / `full`. ADR-007 §Neutral требует переименовать следы `L0/L1/L2` в
+`summary`/`full` — при правке этой схемы использовать новое имя.
 
 ## Конфигурация (новые env vars)
 
