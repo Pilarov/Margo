@@ -33,7 +33,6 @@ const SEMANTIC_CACHE_THRESHOLD = 0.85;
 // SLO budgets (overridable via env)
 const TOTAL_SLO_BUDGET_MS = parseInt(process.env.MEMORY_SEARCH_TOTAL_BUDGET_MS || "220", 10);
 const POST_VECTOR_BUDGET_MS = parseInt(process.env.MEMORY_SEARCH_POST_VECTOR_BUDGET_MS || "120", 10);
-const CHUNK_INJECTION_GUARDRAIL_MS = parseInt(process.env.MEMORY_SEARCH_CHUNK_GUARDRAIL_MS || "180", 10);
 
 // Benchmark escape hatch: bypass caches so runs are independent and reproducible.
 const DISABLE_CACHE = /^true$/i.test(process.env.MEMORY_SEARCH_DISABLE_CACHE || "false");
@@ -465,7 +464,7 @@ export async function searchMemories(
   // Step 3: Early exit if top result is excellent
   if (!queryIntent.wantsRecent && scopedSemanticResults.length > 0 && scopedSemanticResults[0].similarity >= EARLY_EXIT_SIMILARITY) {
     console.log(`⚡ Early exit at ${scopedSemanticResults[0].similarity.toFixed(3)}`);
-    const topMemories = await injectSourceChunks(scopedSemanticResults.slice(0, topK));
+    const topMemories = toMemorySearchResults(scopedSemanticResults.slice(0, topK));
 
     // Cache good results
     if (!DISABLE_CACHE) await setInSemanticCache(queryEmbedding, topMemories, 300);
@@ -537,50 +536,14 @@ export async function searchMemories(
     tracer.record({ layer: "S2.intent", in: candidatePool.length, out: finalResults.length, ms: intentMs });
   }
 
-  // Step 5: Inject source chunks for context (skip in fast mode)
-  let results: MemorySearchResult[];
-  let deliveryMs = 0;
-  const shouldSkipChunkInjection =
-    !disableLatencyDegradation &&
-    !effectiveFastMode &&
-    (Date.now() - startTotal > CHUNK_INJECTION_GUARDRAIL_MS);
-  if (shouldSkipChunkInjection) {
-    timings.push({ step: "degraded_mode_skip_chunk_injection", duration: 0 });
-    console.warn(`[MemorySearch] Skipping chunk injection near SLO budget (guardrail=${CHUNK_INJECTION_GUARDRAIL_MS}ms)`);
-  }
-
-  if (effectiveFastMode || shouldSkipChunkInjection) {
-    // Fast mode: skip chunk injection, return memories directly
-    results = finalResults.map((m) => ({
-      memory: {
-        id: m.id,
-        content: m.content,
-        memoryType: m.memoryType,
-        entityMentions: m.entityMentions || [],
-        confidence: m.confidence,
-        version: m.version,
-        scope: m.scope,
-        scopeTarget: m.scope,
-        userId: m.userId ?? null,
-        sessionId: m.sessionId ?? null,
-        agentId: m.agentId ?? null,
-        taskId: m.taskId ?? null,
-        temporal: {
-          documentDate: m.documentDate,
-          eventDate: m.eventDate,
-          validFrom: m.validFrom,
-          validUntil: m.validUntil,
-        },
-      },
-      similarity: m.similarity,
-    }));
-    timings.push({ step: "chunk_injection", duration: 0 });
-  } else {
-    const chunkStart = Date.now();
-    results = await injectSourceChunks(finalResults);
-    deliveryMs = Date.now() - chunkStart;
-    timings.push({ step: "chunk_injection", duration: deliveryMs });
-  }
+  // Step 5: S3 delivery — map ranked memories into the public result shape.
+  // ADR-015: this used to inject the source chunk of each memory (`injectSourceChunks`) so the
+  // caller could read the surrounding document text, guarded by a latency budget. Margo is a
+  // memory service: a memory may point at external material ("config lives in repo X, file Y"),
+  // but it carries no chunks, so delivery is pure mapping and needs no guardrail.
+  const results: MemorySearchResult[] = toMemorySearchResults(finalResults);
+  const deliveryMs = 0;
+  timings.push({ step: "delivery", duration: deliveryMs });
   tracer.record({ layer: "S3.delivery", in: finalResults.length, out: results.length, ms: deliveryMs });
 
   // Cache results for similar queries
@@ -844,58 +807,15 @@ async function enrichWithRelations(
 }
 
 /**
- * Inject source chunks for top memories
- * Provides full context for LLM
+ * Map ranked memories into the public search-result shape (S3 delivery).
+ *
+ * ADR-015: this replaced `injectSourceChunks`, which looked up `sourceChunkId` on each memory
+ * and attached the surrounding document chunk (`db.chunk.findMany`). Margo is a memory service:
+ * a memory may point at external material in its own content ("config lives in repo X, file Y"),
+ * but it does not carry chunks — so delivery is pure mapping, with no per-query DB round-trip and
+ * no latency guardrail around it.
  */
-async function injectSourceChunks(
-  memories: any[]
-): Promise<MemorySearchResult[]> {
-  const chunkIds = memories
-    .map((m) => m.sourceChunkId)
-    .filter((id): id is string => id !== null);
-
-  if (chunkIds.length === 0) {
-    // Return memories without chunks
-    return memories.map((m) => ({
-      memory: {
-        id: m.id,
-        content: m.content,
-        memoryType: m.memoryType,
-        entityMentions: m.entityMentions || [],
-        confidence: m.confidence,
-        version: m.version,
-        scope: m.scope,
-        scopeTarget: m.scope,
-        userId: m.userId ?? null,
-        sessionId: m.sessionId ?? null,
-        agentId: m.agentId ?? null,
-        taskId: m.taskId ?? null,
-        temporal: {
-          documentDate: m.documentDate,
-          eventDate: m.eventDate,
-          validFrom: m.validFrom,
-          validUntil: m.validUntil,
-        },
-      },
-      similarity: m.similarity,
-    }));
-  }
-
-  // Fetch chunks
-  const chunks = await db.chunk.findMany({
-    where: {
-      id: { in: chunkIds },
-    },
-    select: {
-      id: true,
-      content: true,
-      metadata: true,
-    },
-  });
-
-  const chunkMap = new Map(chunks.map((c) => [c.id, c]));
-
-  // Map memories to results with chunks
+function toMemorySearchResults(memories: any[]): MemorySearchResult[] {
   return memories.map((m) => ({
     memory: {
       id: m.id,
@@ -917,15 +837,7 @@ async function injectSourceChunks(
         validUntil: m.validUntil,
       },
     },
-    chunk: m.sourceChunkId && chunkMap.has(m.sourceChunkId)
-      ? {
-          id: chunkMap.get(m.sourceChunkId)!.id,
-          content: chunkMap.get(m.sourceChunkId)!.content,
-          metadata: (chunkMap.get(m.sourceChunkId)!.metadata ?? {}) as Record<string, any>,
-        }
-      : undefined,
     similarity: m.similarity,
-    relations: m.isRelated ? ([] as MemorySearchResult["relations"]) : undefined,
   }));
 }
 
