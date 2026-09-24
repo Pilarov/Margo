@@ -7,6 +7,11 @@
 
 > Принято 2026-09-24 (все четыре развилки выбраны пользователем). Реализация не начата:
 > шаги 0–8 — см. план `research/2026-09-08-adr-implementation-order.md`, Этап 5.
+>
+> **Scope (2026-09-24, ADR-015)**: карта модулей сокращается до memory-части — `recall/lexical`, `recall/memory`,
+> `fusion`, `rerank/intent`, `delivery/enrich`; документные модули (`rerank/cross-encoder`, `delivery/pack`,
+> документный semantic-канал, документная часть паритета `packages/local`) сняты. Шаги 2–8 исполняются только
+> для `searchMemories`.
 
 ## Context
 
@@ -84,7 +89,7 @@ engine/retrieval/
     memory.ts       searchMemories + retriever.memorySearch → один путь ранжирования   ← добавлен
     type-recall.ts  type-aware boost (сейчас inline внутри searchMemories)
     graph.ts        graphSearch + entity-SQL из routes.ts:3191
-    fusion.ts       reciprocalRankFusion + веса каналов
+    fusion.ts       reciprocalRankFusion + веса каналов; стратегия конфигурируема (rrf | top-up) — контракт в ADR-007 §S1 fusion contract
   rerank/
     intent.ts       rerankByIntent (search.ts:87)                                       ← добавлен
     cross-encoder.ts rerankResults + rerankWithCrossEncoder/InferenceService + одна нормализация score

@@ -246,6 +246,8 @@ The knee on this corpus sits close to the floor (avg 32.6 at min=30), so the "ad
 not yet demonstrated on real score distributions — the floor is what protects recall.
 
 **Pending:**
-- Apply selector to `retriever.ts` S2 (rerank) and S3 (delivery).
+- ~~Apply selector to `retriever.ts` S2 (rerank) and S3 (delivery).~~ — **снято 2026-09-24 решением ADR-015**:
+  documents-путь вырезается целиком, значит окна в `retriever.ts` не внедряются. Окно ADR-013 живёт в
+  memory-пути: S1 сделано, S2/S3 — в шагах ADR-014 при разделении `searchMemories`.
 - Calibrate `δ`/`k` defaults against golden + live score distributions; a latency baseline file
   (the p99 criterion has no named baseline to compare against).
