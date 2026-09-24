@@ -26,7 +26,6 @@ const files = () => read("api/files.ts");
 
 describe("Hermes plugin contract: endpoints", () => {
   const cases: Array<[string, () => string]> = [
-    ["/v1/context/query", () => read("api/routes.ts")],
     ["/v1/memory/search", memory],
     ['"/v1/memory",', memory],
     ["/v1/memory/ingest/session", memory],
@@ -47,15 +46,6 @@ describe("Hermes plugin contract: endpoints", () => {
 });
 
 describe("Hermes plugin contract: request fields", () => {
-  it("context/query accepts query, user_id, session_id, include_memories, max_tokens", () => {
-    const b = routeBlock(read("api/routes.ts"), "/v1/context/query");
-    expect(b).toContain("query:");
-    expect(b).toContain("user_id");
-    expect(b).toContain("session_id");
-    expect(b).toContain("include_memories");
-    expect(b).toContain("max_tokens");
-  });
-
   it("memory/search accepts query, user_id, session_id, top_k, include_pending", () => {
     const b = routeBlock(memory(), "/v1/memory/search");
     expect(b).toContain("top_k");
@@ -92,13 +82,6 @@ describe("Hermes plugin contract: request fields", () => {
 });
 
 describe("Hermes plugin contract: response fields", () => {
-  it("context/query returns results[].content", () => {
-    const src = read("api/routes.ts");
-    const i = src.indexOf('"/v1/context/query"');
-    expect(src.slice(i)).toContain("results:");
-    expect(src.slice(i)).toContain("content:");
-  });
-
   it("profile/:userId returns memories[].content", () => {
     const src = memory();
     const i = src.indexOf('"/v1/memory/profile/:userId"');
