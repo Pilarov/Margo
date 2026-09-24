@@ -63,6 +63,33 @@ baseline file; extend `.gitignore`-aware evidence handling so the numbers surviv
 give `run.py --suite latency` a `--repeats-suite` mode that aggregates N runs and reports the median
 plus spread.
 
+**Investigated 2026-09-24** — `research/2026-09-24-td011-latency-measurement.md` (evidence in
+`reviews/td011/`). Three defects stack, and the second one was invisible before the investigation:
+
+1. **The latency gate evaluates nothing.** A latency run writes `metrics: {latency_p99_ms: …}` and
+   `gate: {pass: true, checks: []}` — `gate.py:74-88` skips a metric that is missing from the
+   baseline, and `gate.py:90` then computes `all([]) == True`. Every `GATE: PASS` ever printed for a
+   latency run is therefore vacuous.
+2. **The published breakdown hides the dominant stage.** Whenever `user_id`/`session_id` is present the
+   route always runs a keyword search, merges it, and then reports `vector_ms: 0, embed_ms: 0` while
+   `total_ms` still includes them (`api/memory.ts:696-698`, `:823-824`) — measured: median `total_ms`
+   116 ms vs 25 ms of reported stages. The telemetry collector keeps the honest values
+   (`GET /v1/admin/telemetry/drop-off`): `vector_ms` p99 138 of a client p99 of 222 ms.
+3. **The statistic is an extreme order statistic.** p99 of 160 samples = the 2nd-largest sample;
+   four 75-sample blocks of one run disagree by 15.2% (1k) / 9.5% (10k), three whole runs by 19.2% /
+   8.1%, while p50 moves 0.6%.
+4. **The API boundary rewrites telemetry** (found 2026-09-24 while wiring ADR-014 step 1):
+   `POST /v1/context/query` rebuilds `meta` field by field (`api/routes.ts:1061-1082`), so any new
+   field on `ContextResponse.meta` — e.g. the per-layer `layers` — is silently dropped unless it is
+   threaded by hand. Same family as #2: what the pipeline reports is not what the caller receives.
+
+Proposed fix (D+A+E: gate semantics, `--runs N` median, honest breakdown) — **не реализован**:
+решения по форме зафиксированы в **ADR-010 §8** (объявление критерия, вердикты `PASS|FAIL|NOT GRADABLE`,
+статистика = медиана N=3 прогонов, noise floor, per-pool сравнение, baseline в git) и **ADR-011 §8**
+(достоверность публикуемых чисел: разбивка складывается, merge ≠ деградация, знаменатели воронки,
+воспроизводимость сигнала). Код D+A+E — compliance-пункты этих поправок и ждёт реализации вместе с
+записью латентностного baseline.
+
 ## Resolved
 
 ### TD-002 — Benchmark corpus is not isolated from latency pools — RESOLVED `81779d8`
